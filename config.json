@@ -1,0 +1,15 @@
+{
+  "primary_backup": "~/Documents/pictures/BACKUP",
+  "sources": [
+    "/run/user/1000/gvfs/mtp:host=Google_Pixel_8_Pro_42230DLJG0014Y/Internal shared storage/DCIM/Camera",
+    "Source B",
+    "Source C",
+    "Source D"
+  ],
+  "backups": [
+    "Destination X",
+    "Destination Y",
+    "Destination Z"
+  ],
+  "exclude"
+}
