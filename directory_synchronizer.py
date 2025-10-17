@@ -1,5 +1,6 @@
 import os
 import shutil
+import time   
 
 """
     Python class to compare two directories and add new files from directory 1 to directory 2. 
@@ -43,6 +44,10 @@ class DirectorySynchronizer:
         Compares the source and destination directories and copies new files
         from the source to the destination.
         """
+        # track elapsed time
+        # Record the start time
+        start_time = time.perf_counter()
+
         if not os.path.isdir(self.source_dir):
             print(f"Error: Source directory '{self.source_dir}' does not exist.")
             return
@@ -71,7 +76,13 @@ class DirectorySynchronizer:
                     shutil.copy2(source_file_full_path, destination_file_full_path)
                     files_copied_count += 1
         
+    
+        # Calculate the elapsed time
+        end_time = time.perf_counter()
+        elapsed_time = end_time - start_time
+
         print(f"Synchronization complete. Copied {files_copied_count} new files.")
+        print(f"Execution time: {elapsed_time:.4f} seconds")
 
 # Example Usage:
 if __name__ == "__main__":
