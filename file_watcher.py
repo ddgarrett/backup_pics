@@ -65,16 +65,12 @@ class FileWatcher:
 
 # Example Usage:
 if __name__ == "__main__":
-    # Create a dummy file for testing purposes
-    # dummy_file_path = "test_file.txt"
-    # with open(dummy_file_path, "w") as f:
-    #     f.write("This is a test file.")
 
     # Watch for the external drive #1 = Google Pixel 8 PrInternal shared storage/DCIM/Camerao
     print("Watching for Google Pixel 8 Pro..." )
     watcher = FileWatcher("/run/user/1000/gvfs/mtp:host=Google_Pixel_8_Pro_42230DLJG0014Y",
                           "Internal shared storage/DCIM/Camera", 
-                           retry_interval=5, max_retries=20000)
+                           retry_interval=5, max_retries=100)
     if watcher.find_file():
         print("waiting 5 seconds before dismounting...")
         time.sleep(5)
@@ -82,23 +78,13 @@ if __name__ == "__main__":
         print("dismounted")
 
     # Watch for T7 drive
-    print
+    print("Watching for T7..." )
     watcher = FileWatcher("/media/dgarrett/T7",
                           "MEDIA_BACKUP", 
-                           retry_interval=5, max_retries=20000)
+                           retry_interval=5, max_retries=100)
     if watcher.find_file():
         print("waiting 5 seconds before dismounting...")
         time.sleep(5)
         watcher.dismount()
         print("dismounted")
 
-    # /run/user/1000/gvfs/mtp:host=Google_Pixel_8_Pro_42230DLJG0014Y
-    # gio mount -u "/run/user/1000/gvfs/mtp:host=Google_Pixel_8_Pro_42230DLJG0014Y"
-    # gio mount -u "/media/dgarrett/T7"
-    # Watch for a non-existent file
-    # non_existent_file_path = "non_existent_file.txt"
-    # non_existent_watcher = FileWatcher(non_existent_file_path, retry_interval=3, max_retries=3)
-    # non_existent_watcher.find_file()
-
-    # Clean up the dummy file
-    # os.remove(dummy_file_path)
