@@ -1,15 +1,31 @@
 {
-  "primary_backup": "~/Documents/pictures/BACKUP",
+  "local_backup_directory": "~/Documents/pictures/MEDIA_BACKUP",
+  "backup_subdirectory":"yyyy-mm-dd_backup",
   "sources": [
-    "/run/user/1000/gvfs/mtp:host=Google_Pixel_8_Pro_42230DLJG0014Y/Internal shared storage/DCIM/Camera",
-    "Source B",
-    "Source C",
-    "Source D"
+    {"volume":"/run/user/1000/gvfs/mtp:host=Google_Pixel_8_Pro_42230DLJG0014Y",
+     "directory":"Internal shared storage/DCIM/Camera", "descr":"Google Pixel 8 Pro Cell" },
+
+    {"volume":"/media/dgarrett/OM SYSTEM",
+     "directory":"DCIM/100OMSYS", "descr":"TG-7 Olympus Camera 64 GB primary microSD Card" },
+
+    {"volume":"/media/dgarrett/3835-3539",
+     "directory":"DCIM/100OMSYS", "descr":"TG-7 Olympus Camera 32 GB backup microSD Card" }
+
   ],
   "backups": [
-    "Destination X",
-    "Destination Y",
-    "Destination Z"
+    {"volume":"/media/dgarrett/T7",          "directory":"pictures/MEDIA_BACKUP", "descr":"primary travel - 2 TB exFAT Samsung SSD" },
+    {"volume":"/media/dgarrett/My Passport", "directory":"pictures/MEDIA_BACKUP", "descr":"2ndary home based - 2 TB NTFS WD HDD"},
+
+    {"volume":"/media/dgarrett/C290-11EB",   "directory":"pictures/MEDIA_BACKUP", "descr":"2ndary travel - 0.5 TB FAT32 Kingston SSD"},
+
+    {"volume":"/media/dgarrett/SSD02",       "directory":"pictures/MEDIA_BACKUP", "descr":"unused  - 2 TB exFAT SanDisk SSD"},
+    {"volume":"/media/dgarrett/Seagate Backup Plus Drive",       
+                                             "directory":"pictures/MEDIA_BACKUP", "descr":"unused - 1 TB NTFS Seagate HDD"}
+
   ],
-  "exclude"
+  "exclude": [
+    "broken leg repair.jpg",
+    "grandfather.jpg",
+    "mom_et_al.jpg"
+  ]
 }
