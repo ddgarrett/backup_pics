@@ -2,6 +2,9 @@ import os
 import time
 import subprocess
 
+from json_config_reader import JsonConfigReader
+
+
 """
 generate python class that looks for a particular file path and 
 if it is not found, waits for 5 seconds and then retries
@@ -66,25 +69,63 @@ class FileWatcher:
 # Example Usage:
 if __name__ == "__main__":
 
+    config = JsonConfigReader("config.json")
+    backup_subdir = config.get("backup_subdirectory", "yyyy-mm-dd_backup")
+    backups = config.get("backups", [])
+    sources = config.get("sources", [])
+    exclude_files = set(config.get("exclude", []))
+    local_backup_directory = os.path.expanduser(config.get("local_backup_directory", "~/Documents/pictures/MEDIA_BACKUP"))  
+
+    # Iterate through each backup destination
+    for backup in sources:
+        backup_volume = backup.get("volume")
+        backup_directory = backup.get("directory")
+        backup_descr = backup.get("descr", "No description")
+
+        print(f"Watching for {backup_descr}...")
+        watcher = FileWatcher(backup_volume,backup_directory, 
+                            retry_interval=5, max_retries=100)
+        
+        if watcher.find_file():
+            print("waiting 5 seconds before dismounting...")
+            time.sleep(5)
+            watcher.dismount()
+            print("dismounted")
+
+
+
+ 
+
+    # Watch for the external drive
+    # print("Watching for Google Pixel 8 Pro..." )
+    # watcher = FileWatcher("/run/user/1000/gvfs/mtp:host=Google_Pixel_8_Pro_42230DLJG0014Y",
+    #                       "Internal shared storage/DCIM/Camera", 
+    #                        retry_interval=5, max_retries=100)
+    # if watcher.find_file():
+    #     print("waiting 5 seconds before dismounting...")
+    #     time.sleep(5)
+    #     watcher.dismount()
+    #     print("dismounted")
+
     # Watch for the external drive #1 = Google Pixel 8 PrInternal shared storage/DCIM/Camerao
-    print("Watching for Google Pixel 8 Pro..." )
-    watcher = FileWatcher("/run/user/1000/gvfs/mtp:host=Google_Pixel_8_Pro_42230DLJG0014Y",
-                          "Internal shared storage/DCIM/Camera", 
-                           retry_interval=5, max_retries=100)
-    if watcher.find_file():
-        print("waiting 5 seconds before dismounting...")
-        time.sleep(5)
-        watcher.dismount()
-        print("dismounted")
+    # print("Watching for Google Pixel 8 Pro..." )
+    # watcher = FileWatcher("/run/user/1000/gvfs/mtp:host=Google_Pixel_8_Pro_42230DLJG0014Y",
+    #                       "Internal shared storage/DCIM/Camera", 
+    #                        retry_interval=5, max_retries=100)
+    # if watcher.find_file():
+    #     print("waiting 5 seconds before dismounting...")
+    #     time.sleep(5)
+    #     watcher.dismount()
+    #     print("dismounted")
 
     # Watch for T7 drive
-    print("Watching for T7..." )
-    watcher = FileWatcher("/media/dgarrett/T7",
-                          "MEDIA_BACKUP", 
-                           retry_interval=5, max_retries=100)
-    if watcher.find_file():
-        print("waiting 5 seconds before dismounting...")
-        time.sleep(5)
-        watcher.dismount()
-        print("dismounted")
+    # print("Watching for T7..." )
+    # watcher = FileWatcher("/media/dgarrett/T7",
+    #                       "MEDIA_BACKUP", 
+    #                        retry_interval=5, max_retries=100)
+    # if watcher.find_file():
+    #     print("waiting 5 seconds before dismounting...")
+    #     time.sleep(5)
+    #     watcher.dismount()
+    #     print("dismounted")
 
