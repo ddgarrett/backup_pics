@@ -15,7 +15,7 @@ class FileWatcher:
     A class to monitor a file path, retrying if the file is not found.
     """
 
-    def __init__(self, volume, directory, retry_interval=5, max_retries=3):
+    def __init__(self, volume, directory, retry_interval=5, max_retries=0):
         """
         Initializes the FileWatcher.
 
@@ -47,7 +47,7 @@ class FileWatcher:
                     print(f"File not found. Retrying in {self.retry_interval} seconds... (Attempt {attempt + 1}/{self.max_retries})")
                     time.sleep(self.retry_interval)
                 else:
-                    print(f"File not found after {self.max_retries} attempts.")
+                    # print(f"File not found after {self.max_retries} attempts.")
                     return False
 
     def dismount(self):
