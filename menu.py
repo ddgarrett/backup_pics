@@ -16,17 +16,17 @@ Prereq: pip install sv-ttk
 # --- Function Definitions ---
 # Each function to be run needs to be defined here.
 # You can add more functions as needed.
-def say_hello():
+def say_hello(caller):
     response = messagebox.askokcancel("Connect Device", "Connect Pixel Phone, press OK to continue")
     print("message hello box closed, response:", response)
 
-def show_message():
+def show_message(caller):
     messagebox.showinfo("Function Executed", "This is a custom message from function 2.")
 
-def display_info():
+def display_info(caller):
     messagebox.showinfo("Function Executed", "Function 3: Here is some important information.")
 
-def run_task():
+def run_task(caller):
     messagebox.showinfo("Function Executed", "Running a generic task for function 4.")
 
 
@@ -118,7 +118,7 @@ class FunctionRunnerApp(tk.Tk):
         try:
             func_data = function_lookup[function_number]
             self.update_status(f"Executing: {func_data['name']}...")
-            self.after(100, lambda: func_data['function']())
+            self.after(100, lambda: func_data['function'](self))
             self.update_status(f"Execution complete for: {func_data['name']}")
         except KeyError:
             messagebox.showerror("Error", f"Function number {function_number} not found.")
@@ -141,6 +141,8 @@ class FunctionRunnerApp(tk.Tk):
         """Handler for Enter key press in the entry widget."""
         try:
             function_number = int(self.function_entry.get())
+            self.function_listbox.selection_clear(0, tk.END)
+            self.function_listbox.select_set(function_number - 1)
             self.run_function(function_number)
             self.function_entry.delete(0, tk.END)  # Clear entry box
         except ValueError:
