@@ -10,7 +10,7 @@ import time
 """
 
 class DirectorySynchronizer:
-    def __init__(self, source_dir, destination_dir):
+    def __init__(self, source_dir, destination_dir, exclude_files=set()):
         """
         Initializes the DirectorySynchronizer.
 
@@ -35,6 +35,8 @@ class DirectorySynchronizer:
         all_files = set()
         for root, _, files in os.walk(directory_path):
             for file in files:
+                if file in self.exclude_files:
+                    continue
                 relative_path = os.path.relpath(os.path.join(root, file), directory_path)
                 all_files.add(relative_path)
         return all_files
