@@ -17,8 +17,31 @@ Prereq: pip install sv-ttk
 # Each function to be run needs to be defined here.
 # You can add more functions as needed.
 def say_hello(caller):
-    response = messagebox.askokcancel("Connect Device", "Connect Pixel Phone, press OK to continue")
+    item = caller.function_listbox.curselection()[0]
+
+    if caller.backup_running:
+        msg = "Stop Backup Monitor?"
+    else:
+        msg = "Start Backup Monitor?"
+
+    response = messagebox.askokcancel("Backup", msg)
     print("message hello box closed, response:", response)
+    if response:
+        if caller.backup_running:
+            print("stopping backup...")
+            caller.backup_running = False
+            item_txt = f'{item + 1}. Start Backup Monitor?'
+            caller.function_listbox.delete(item)
+            caller.function_listbox.insert(item, item_txt)
+        else:
+            print("starting backup...")
+            caller.backup_running = True
+            item_txt = f'{item + 1}. Stop Backup Monitor?'
+            caller.function_listbox.delete(item)
+            caller.function_listbox.insert(item, item_txt)
+
+        caller.function_listbox.selection_clear(0, tk.END)
+        caller.function_listbox.selection_set(item)
 
 def show_message(caller):
     messagebox.showinfo("Function Executed", "This is a custom message from function 2.")
@@ -34,7 +57,7 @@ def run_task(caller):
 # This dictionary maps the function number and name to the actual function reference.
 # The keys are used to populate the listbox and can be used for direct access.
 function_lookup = {
-    1: {"name": "Say Hello", "function": say_hello},
+    1: {"name": "Start Backup Monitor?", "function": say_hello},
     2: {"name": "Show a Message", "function": show_message},
     3: {"name": "Display Information", "function": display_info},
     4: {"name": "Run a Task", "function": run_task}
@@ -43,6 +66,9 @@ function_lookup = {
 class FunctionRunnerApp(tk.Tk):
     def __init__(self):
         super().__init__()
+
+        self.backup_running = False
+
         self.title("Function Runner")
         self.geometry("500x400")
 
@@ -80,7 +106,8 @@ class FunctionRunnerApp(tk.Tk):
         self.function_listbox.config(yscrollcommand=scrollbar.set)
 
         # Bind listbox selection event to the handler
-        self.function_listbox.bind("<<ListboxSelect>>", self.on_listbox_select)
+        # self.function_listbox.bind("<<ListboxSelect>>", self.on_listbox_select)
+        self.function_listbox.bind("<Double-1>", self.on_listbox_select)
 
         # --- Entry for Typing Function Number ---
         entry_frame = ttk.Frame(main_frame)
@@ -92,8 +119,9 @@ class FunctionRunnerApp(tk.Tk):
         self.function_entry = ttk.Entry(entry_frame, width=5)
         self.function_entry.pack(side="left")
 
-        # Bind the Enter key to the entry widget
+        # Bind the Enter key to the entry widget and listbox
         self.function_entry.bind("<Return>", self.on_entry_enter)
+        self.function_listbox.bind("<Return>", self.on_entry_enter)
 
         # --- Run Button ---
         run_button = ttk.Button(
@@ -140,7 +168,12 @@ class FunctionRunnerApp(tk.Tk):
     def on_entry_enter(self, event):
         """Handler for Enter key press in the entry widget."""
         try:
-            function_number = int(self.function_entry.get())
+            entry = self.function_entry.get().strip()
+            if len(entry) == 0:
+                function_number = self.function_listbox.curselection()[0] + 1
+            else:
+                function_number = int(entry)
+
             self.function_listbox.selection_clear(0, tk.END)
             self.function_listbox.select_set(function_number - 1)
             self.run_function(function_number)
