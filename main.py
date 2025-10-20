@@ -17,7 +17,7 @@
 import time
 from file_watcher import FileWatcher
 from json_config_reader import JsonConfigReader
-
+from blink_red_led import TogglePowerLed
 
 config = JsonConfigReader("config.json")
 backup_subdir = config.get("backup_subdirectory", "yyyy-mm-dd_backup")
@@ -44,7 +44,6 @@ def create_file_watchers():
         print(f"Watching for {backup_descr}...")
         watcher = FileWatcher(backup_volume,backup_directory)
         backup["watcher"] = watcher
-    
 
 create_file_watchers()
 # print(sources)
