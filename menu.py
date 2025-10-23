@@ -64,7 +64,7 @@ function_lookup = {
 }
 
 class FunctionRunnerApp(tk.Tk):
-    def __init__(self):
+    def __init__(self,parms):
         super().__init__()
 
         self.backup_running = False
@@ -105,9 +105,9 @@ class FunctionRunnerApp(tk.Tk):
         scrollbar.pack(side="right", fill="y")
         self.function_listbox.config(yscrollcommand=scrollbar.set)
 
-        # Bind listbox selection event to the handler
-        # self.function_listbox.bind("<<ListboxSelect>>", self.on_listbox_select)
+        # Bind listbox events to the handler
         self.function_listbox.bind("<Double-1>", self.on_listbox_select)
+        self.function_listbox.bind("<Return>", self.on_listbox_select)
 
         # --- Entry for Typing Function Number ---
         entry_frame = ttk.Frame(main_frame)
@@ -121,7 +121,6 @@ class FunctionRunnerApp(tk.Tk):
 
         # Bind the Enter key to the entry widget and listbox
         self.function_entry.bind("<Return>", self.on_entry_enter)
-        self.function_listbox.bind("<Return>", self.on_entry_enter)
 
         # --- Run Button ---
         run_button = ttk.Button(

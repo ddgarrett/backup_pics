@@ -1,4 +1,10 @@
 {
+  "menus": [
+    {"name":"Start Backup Monitor",
+     "source":"backup_pictures",
+     "parameters":{}
+    }
+  ],
   "local_backup_directory": "~/Documents/pictures/MEDIA_BACKUP",
   "backup_subdirectory":"yyyy-mm-dd_backup",
   "sources": [
