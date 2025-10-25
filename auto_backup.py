@@ -12,13 +12,16 @@
 
 '''
 
+import threading
 import time
 from file_watcher import FileWatcher
 from json_config_reader import JsonConfigReader
 from blink_red_led import TogglePowerLed
 
-class AutoBackup:
-    def __init__(self, sources, backups, backup_subdir, exclude_files):
+class AutoBackup(threading.Thread):
+    def __init__(self, sources, backups, backup_subdir, exclude_files, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._stop_event = threading.Event()
         self.sources = sources
         self.backups = backups
         self.backup_subdir = backup_subdir
@@ -31,44 +34,71 @@ class AutoBackup:
         for source in self.sources:
             source_volume = source.get("volume")
             source_directory = source.get("directory")
-        source_descr = source.get("descr", "No description")
+            source_descr = source.get("descr", "No description")
 
-        print(f"Watching for {source_descr}...")
-        watcher = FileWatcher(source_volume,source_directory)
-        source["watcher"] = watcher
+            print(f"Watching for {source_descr}...")
+            watcher = FileWatcher(source_volume,source_directory)
+            source["watcher"] = watcher
 
         for backup in backups:
             backup_volume = backup.get("volume")
             backup_directory = backup.get("directory")
             backup_descr = backup.get("descr", "No description")
 
-        print(f"Watching for {backup_descr}...")
-        watcher = FileWatcher(backup_volume,backup_directory)
-        backup["watcher"] = watcher
+            print(f"Watching for {backup_descr}...")
+            watcher = FileWatcher(backup_volume,backup_directory)
+            backup["watcher"] = watcher
 
+    def stop(self):
+        """Sets the internal flag to signal the thread to stop."""
+        self._stop_event.set()
+
+    def stopped(self):
+        """Checks if the stop event has been set."""
+        return self._stop_event.is_set()
+    
     def run(self):
-        while True:
+        while not self.stopped():
             # Check each source for files
             for source in sources:
                 watcher = source.get("watcher")
                 if watcher.find_file():
                     print(f"Source '{source.get('descr', 'No description')}' found.")
+
+                    # Create and start the thread to blink red LED
+                    thread = TogglePowerLed(interval=0.5)
+                    thread.start()
+
                     # TODO: Add code to backup new files from source to local backup directory
-                    print("waiting 5 seconds before dismounting...")
+                    print("waiting 5 seconds before dismounting since copy not yet in place...")
                     time.sleep(5)
                     watcher.dismount()
                     print("dismounted")
+
+                    # Stop thread from the main thread
+                    thread.stop()
+                    thread.join()
 
             # Check each backup for files
             for backup in backups:
                 watcher = backup.get("watcher")
                 if watcher.find_file():
                     print(f"Backup '{backup.get('descr', 'No description')}' found.")
+
+                   # Create and start the thread to blink red LED
+                    thread = TogglePowerLed(interval=0.5)
+                    thread.start()
+
                     # TODO: Add code to backup new files from local backup directory to backup volume
-                    print("waiting 5 seconds before dismounting...")
+                    print("waiting 5 seconds before dismounting since copy not yet in place...")
                     time.sleep(5)
+
                     watcher.dismount()
                     print("dismounted")
+
+                    # Stop thread from the main thread
+                    thread.stop()
+                    thread.join()
 
 if __name__ == "__main__":
     config = JsonConfigReader("config.json")
@@ -77,5 +107,17 @@ if __name__ == "__main__":
     sources = config.get("sources", [])
     exclude_files = set(config.get("exclude", []))
 
-    auto_backup = AutoBackup(sources, backups, backup_subdir, exclude_files)
-    auto_backup.run()
+    thread = AutoBackup(sources, backups, backup_subdir, exclude_files)
+    thread.start()
+
+    # Let thread run for a bit
+    time.sleep(10)
+
+    # Stop thread from the main thread
+    print("\nMain thread: Signalling Worker to stop...")
+    thread.stop()
+
+    # Wait for the thread to finish its execution
+    thread.join()
+
+    print("\nMain thread: All threads have stopped.")
