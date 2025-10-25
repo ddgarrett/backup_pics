@@ -30,7 +30,7 @@ class TogglePowerLed(threading.Thread):
         """
 
         while not self.stopped():
-            self.led_controller.led_toggle()
+            self.led_controller.toggle_power_led()
 
              # wait for specified interval
             time.sleep(self.interval)
