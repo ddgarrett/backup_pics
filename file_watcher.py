@@ -6,8 +6,9 @@ from json_config_reader import JsonConfigReader
 
 
 """
-generate python class that looks for a particular file path and 
+Python class that looks for a particular file path and
 if it is not found, waits for 5 seconds and then retries
+up to a maximum number of retries.
 """
 
 class FileWatcher:
@@ -92,40 +93,4 @@ if __name__ == "__main__":
             watcher.dismount()
             print("dismounted")
 
-
-
- 
-
-    # Watch for the external drive
-    # print("Watching for Google Pixel 8 Pro..." )
-    # watcher = FileWatcher("/run/user/1000/gvfs/mtp:host=Google_Pixel_8_Pro_42230DLJG0014Y",
-    #                       "Internal shared storage/DCIM/Camera", 
-    #                        retry_interval=5, max_retries=100)
-    # if watcher.find_file():
-    #     print("waiting 5 seconds before dismounting...")
-    #     time.sleep(5)
-    #     watcher.dismount()
-    #     print("dismounted")
-
-    # Watch for the external drive #1 = Google Pixel 8 PrInternal shared storage/DCIM/Camerao
-    # print("Watching for Google Pixel 8 Pro..." )
-    # watcher = FileWatcher("/run/user/1000/gvfs/mtp:host=Google_Pixel_8_Pro_42230DLJG0014Y",
-    #                       "Internal shared storage/DCIM/Camera", 
-    #                        retry_interval=5, max_retries=100)
-    # if watcher.find_file():
-    #     print("waiting 5 seconds before dismounting...")
-    #     time.sleep(5)
-    #     watcher.dismount()
-    #     print("dismounted")
-
-    # Watch for T7 drive
-    # print("Watching for T7..." )
-    # watcher = FileWatcher("/media/dgarrett/T7",
-    #                       "MEDIA_BACKUP", 
-    #                        retry_interval=5, max_retries=100)
-    # if watcher.find_file():
-    #     print("waiting 5 seconds before dismounting...")
-    #     time.sleep(5)
-    #     watcher.dismount()
-    #     print("dismounted")
 
