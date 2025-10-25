@@ -5,7 +5,7 @@ import time
 """
     Python class to compare two directories and add new files from directory 1 to directory 2. 
     Note that in some cases directory 2 may be very large while directory 1 will be small 
-    or both may be very large. Therefore the program should first create a set with all of the 
+    or both may be very large. Therefore the program first creates a set with all of the 
     files in directory 2.
 """
 
@@ -88,31 +88,6 @@ class DirectorySynchronizer:
 
 # Example Usage:
 if __name__ == "__main__":
-    '''
-    # Create dummy directories and files for testing
-    os.makedirs("dir1/subdir", exist_ok=True)
-    os.makedirs("dir2/subdir", exist_ok=True)
-
-    with open("dir1/fileA.txt", "w") as f:
-        f.write("Content A")
-    with open("dir1/subdir/fileB.txt", "w") as f:
-        f.write("Content B")
-    with open("dir2/fileC.txt", "w") as f:
-        f.write("Content C")
-    with open("dir2/subdir/fileD.txt", "w") as f:
-        f.write("Content D")
-    with open("dir1/new_file.txt", "w") as f:
-        f.write("New content")
-    with open("dir1/subdir/another_new_file.txt", "w") as f:
-        f.write("Another new content")
-
-    synchronizer = DirectorySynchronizer("dir1", "dir2")
-    synchronizer.synchronize_new_files()
-
-    # Clean up dummy directories
-    shutil.rmtree("dir1")
-    shutil.rmtree("dir2")
-    '''
 
     synchronizer = DirectorySynchronizer("/home/dgarrett/Documents/pictures", 
                                          "/media/dgarrett/T7/test_backup")
