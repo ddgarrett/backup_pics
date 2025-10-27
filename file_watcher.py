@@ -85,7 +85,7 @@ if __name__ == "__main__":
 
         print(f"Watching for {backup_descr}...")
         watcher = FileWatcher(backup_volume,backup_directory, 
-                            retry_interval=5, max_retries=100)
+                            retry_interval=5, max_retries=10)
         
         if watcher.find_file():
             print("waiting 5 seconds before dismounting...")

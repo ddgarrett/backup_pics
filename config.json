@@ -5,8 +5,8 @@
      "parameters":{}
     }
   ],
-  "local_backup_directory": "~/Documents/pictures/MEDIA_BACKUP",
-  "backup_subdirectory":"yyyy-mm-dd_backup",
+  "local_backup_dir": "~/Documents/pictures/MEDIA_BACKUP",
+  "backup_subdir":"yyyy-mm-dd_backup",
   "sources": [
     {"volume":"/run/user/1000/gvfs/mtp:host=Google_Pixel_8_Pro_42230DLJG0014Y",
      "directory":"Internal shared storage/DCIM/Camera", "descr":"Google Pixel 8 Pro Cell" },

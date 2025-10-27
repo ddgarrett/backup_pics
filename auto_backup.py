@@ -21,9 +21,9 @@ from blink_red_led import TogglePowerLed
 from directory_synchronizer import DirectorySynchronizer
 
 class AutoBackup(threading.Thread):
-    def __init__(self, local_backup_directory, sources, backups, backup_subdir, exclude_files, *args, **kwargs):
+    def __init__(self, local_backup_dir, sources, backups, backup_subdir, exclude_files, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.local_backup_directory = local_backup_directory
+        self.local_backup_dir = local_backup_dir
         self._stop_event = threading.Event()
         self.sources = sources
         self.backups = backups
@@ -43,7 +43,7 @@ class AutoBackup(threading.Thread):
             watcher = FileWatcher(source_volume,source_directory)
             source["watcher"] = watcher
 
-        for backup in backups:
+        for backup in self.backups:
             backup_volume = backup.get("volume")
             backup_directory = backup.get("directory")
             backup_descr = backup.get("descr", "No description")
@@ -62,39 +62,45 @@ class AutoBackup(threading.Thread):
     
     def run(self):
         while not self.stopped():
+            # Wait between checks
+            time.sleep(3)
+            
             # Check each source for files
-            for source in sources:
+            for source in self.sources:
                 watcher = source.get("watcher")
                 if watcher.find_file():
                     print(f"Source '{source.get('descr', 'No description')}' found.")
 
                     # Create and start the thread to blink red LED
-                    thread = TogglePowerLed(interval=0.5)
-                    thread.start()
+                    blink_led = TogglePowerLed()
 
                     # Backup new files from source to local backup directory
-                    DirectorySynchronizer(
-                        os.path.join(watcher.mounted_path, watcher.directory, self.backup_subdir),
-                        os.path.join(self.local_backup_directory, self.backup_subdir),
-                        exclude_files=self.exclude_files
-                    ).synchronize_new_files()
+                    dst = os.path.join(self.local_backup_dir, self.backup_subdir)
+                    print(f"Backing up new files from '{watcher.file_path}' to '{dst}'...")
+
+                    print("waiting 5 seconds before dismounting since copy not yet in place...")
+                    time.sleep(5)
+
+                    # DirectorySynchronizer(
+                    #     os.path.join(watcher.mounted_path, watcher.directory, self.backup_subdir),
+                    #     os.path.join(self.local_backup_directory, self.backup_subdir),
+                    #     exclude_files=self.exclude_files
+                    # ).synchronize_new_files()
 
                     watcher.dismount()
                     print("dismounted")
 
-                    # Stop thread from the main thread
-                    thread.stop()
-                    thread.join()
+                    # Stop blinking light
+                    blink_led.stop()
 
             # Check each backup for files
-            for backup in backups:
+            for backup in self.backups:
                 watcher = backup.get("watcher")
                 if watcher.find_file():
                     print(f"Backup '{backup.get('descr', 'No description')}' found.")
 
-                   # Create and start the thread to blink red LED
-                    thread = TogglePowerLed(interval=0.5)
-                    thread.start()
+                    # Create and start the thread to blink red LED
+                    blink_led = TogglePowerLed()
 
                     # TODO: Add code to backup new files from local backup directory to backup volume
                     print("waiting 5 seconds before dismounting since copy not yet in place...")
@@ -103,19 +109,19 @@ class AutoBackup(threading.Thread):
                     watcher.dismount()
                     print("dismounted")
 
-                    # Stop thread from the main thread
-                    thread.stop()
-                    thread.join()
+                    # Stop blinking light
+                    blink_led.stop()
+            
 
 if __name__ == "__main__":
     config = JsonConfigReader("config.json")
-    local_backup_directory = config.get("local_backup_directory")
-    backup_subdir = config.get("backup_subdirectory", "yyyy-mm-dd_backup")
+    local_backup_dir = config.get("local_backup_dir")
+    backup_subdir = config.get("backup_subdir", "yyyy-mm-dd_backup")
     backups = config.get("backups", [])
     sources = config.get("sources", [])
     exclude_files = set(config.get("exclude", []))
 
-    thread = AutoBackup(local_backup_directory,sources, backups, backup_subdir, exclude_files)
+    thread = AutoBackup(local_backup_dir,sources, backups, backup_subdir, exclude_files)
     thread.start()
 
     # Let thread run for a bit
