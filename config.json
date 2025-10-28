@@ -7,6 +7,7 @@
   ],
   "local_backup_dir": "~/Documents/pictures/MEDIA_BACKUP",
   "backup_subdir":"yyyy-mm-dd_backup",
+  "exclude": "sync_exclude.txt",
   "sources": [
     {"volume":"/run/user/1000/gvfs/mtp:host=Google_Pixel_8_Pro_42230DLJG0014Y",
      "directory":"Internal shared storage/DCIM/Camera", "descr":"Google Pixel 8 Pro Cell" },
@@ -28,10 +29,6 @@
     {"volume":"/media/dgarrett/Seagate Backup Plus Drive",       
                                              "directory":"pictures/MEDIA_BACKUP", "descr":"unused - 1 TB NTFS Seagate HDD"}
 
-  ],
-  "exclude": [
-    "broken leg repair.jpg",
-    "grandfather.jpg",
-    "mom_et_al.jpg"
   ]
+
 }

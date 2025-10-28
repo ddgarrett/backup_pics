@@ -1,94 +1,114 @@
+import subprocess
 import os
-import shutil
-import time   
+from typing import Optional
 
-"""
-    Python class to compare two directories and add new files from directory 1 to directory 2. 
-    Note that in some cases directory 2 may be very large while directory 1 will be small 
-    or both may be very large. Therefore the program first creates a set with all of the 
-    files in directory 2.
-"""
+''' 
+  Google Search Prompt:
+    generate a python class to execute a bash script named dir_sync.sh 
+    passing the script source and destination directory names 
+    and name of file with exclude statements
+'''
 
-class DirectorySynchronizer:
-    def __init__(self, source_dir, destination_dir, exclude_files=set()):
-        """
-        Initializes the DirectorySynchronizer.
-
-        Args:
-            source_dir (str): The path to the source directory (Directory 1).
-            destination_dir (str): The path to the destination directory (Directory 2).
-        """
-        self.source_dir = os.path.abspath(source_dir)
-        self.destination_dir = os.path.abspath(destination_dir)
-
-    def _get_all_files_in_directory(self, directory_path):
-        """
-        Recursively collects all file paths within a given directory and returns them as a set.
-        Paths are relative to the given directory_path.
-
-        Args:
-            directory_path (str): The path to the directory to scan.
-
-        Returns:
-            set: A set of relative file paths within the directory.
-        """
-        all_files = set()
-        for root, _, files in os.walk(directory_path):
-            for file in files:
-                if file in self.exclude_files:
-                    continue
-                relative_path = os.path.relpath(os.path.join(root, file), directory_path)
-                all_files.add(relative_path)
-        return all_files
-
-    def synchronize_new_files(self):
-        """
-        Compares the source and destination directories and copies new files
-        from the source to the destination.
-        """
-        # track elapsed time
-        # Record the start time
-        start_time = time.perf_counter()
-
-        if not os.path.isdir(self.source_dir):
-            print(f"Error: Source directory '{self.source_dir}' does not exist.")
-            return
-        if not os.path.isdir(self.destination_dir):
-            print(f"Error: Destination directory '{self.destination_dir}' does not exist.")
-            return
-
-        print(f"Scanning destination directory '{self.destination_dir}'...")
-        destination_files = self._get_all_files_in_directory(self.destination_dir)
-        print(f"Found {len(destination_files)} files in destination directory.")
-
-        print(f"Scanning source directory '{self.source_dir}' and comparing...")
-        files_copied_count = 0
-        for root, _, files in os.walk(self.source_dir):
-            for file in files:
-                source_file_relative_path = os.path.relpath(os.path.join(root, file), self.source_dir)
-
-                if source_file_relative_path not in destination_files:
-                    source_file_full_path = os.path.join(root, file)
-                    destination_file_full_path = os.path.join(self.destination_dir, source_file_relative_path)
-
-                    # Create necessary subdirectories in the destination
-                    os.makedirs(os.path.dirname(destination_file_full_path), exist_ok=True)
-
-                    # print(f"Copying new file: '{source_file_relative_path}'")
-                    shutil.copy2(source_file_full_path, destination_file_full_path)
-                    files_copied_count += 1
-        
+class DirSync:
+    """
+    A class to execute the dir_sync.sh bash script.
     
-        # Calculate the elapsed time
-        end_time = time.perf_counter()
-        elapsed_time = end_time - start_time
+    This class uses Python's subprocess module to run a bash script with
+    specified source, destination, and exclude file arguments.
+    """
+    def __init__(self, script_path: str):
+        """
+        Initializes the DirSync instance.
+        
+        Args:
+            script_path (str): The full path to the dir_sync.sh script.
+        """
+        if not os.path.isfile(script_path):
+            raise FileNotFoundError(f"The script file was not found: {script_path}")
+        self.script_path = script_path
+        
+    def run_sync(self, source_dir: str, dest_dir: str, exclude_file: Optional[str] = None):
+        """
+        Executes the dir_sync.sh script with the specified arguments.
+        
+        Args:
+            source_dir (str): The source directory for the sync.
+            dest_dir (str): The destination directory for the sync.
+            exclude_file (Optional[str]): The name of the file containing exclude statements.
+                If None, the exclude file argument is omitted.
+        
+        Returns:
+            subprocess.CompletedProcess: The result of the completed process.
+        
+        Raises:
+            subprocess.CalledProcessError: If the script returns a non-zero exit code.
+        """
+        # Construct the command as a list of strings for security
+        # This prevents shell injection vulnerabilities.
+        command = [self.script_path, source_dir, dest_dir]
 
-        print(f"Synchronization complete. Copied {files_copied_count} new files.")
-        print(f"Execution time: {elapsed_time:.4f} seconds")
+        if exclude_file:
+            command.append(exclude_file)
 
-# Example Usage:
+        print(f"Executing command: {' '.join(command)}")
+        
+        try:
+            # Use subprocess.run for a straightforward, high-level approach.
+            # `check=True` will raise an exception if the script fails.
+            # `capture_output=True` captures stdout and stderr.
+            # `text=True` decodes output to strings.
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            print("Script executed successfully.")
+            return result
+        except FileNotFoundError:
+            print("Error: The script or one of the directories was not found.")
+            raise
+        except subprocess.CalledProcessError as e:
+            print("Error: Script execution failed.")
+            print(f"Return code: {e.returncode}")
+            print(f"Standard output: {e.stdout}")
+            print(f"Standard error: {e.stderr}")
+            raise
+
+# --- Example Usage ---
+
 if __name__ == "__main__":
+    # Create a dummy shell script for demonstration
+    with open("dir_sync.sh", "w") as f:
+        f.write("#!/bin/bash\n\n")
+        f.write("echo \"Running sync from $1 to $2\"\n")
+        f.write("if [ -n \"$3\" ]; then\n")
+        f.write("    echo \"Using exclude file: $3\"\n")
+        f.write("fi\n")
+        f.write("echo \"Sync complete.\"\n")
+    
+    # Make the script executable
+    os.chmod("dir_sync.sh", 0o755)
 
-    synchronizer = DirectorySynchronizer("/home/dgarrett/Documents/pictures", 
-                                         "/media/dgarrett/T7/test_backup")
-    synchronizer.synchronize_new_files()
+    # Initialize the class with the script path
+    sync_manager = DirSync("./dir_sync.sh")
+
+    # Example 1: Execute the script with all arguments
+    try:
+        source = "/path/to/source"
+        destination = "/path/to/destination"
+        exclude_file = "exclude.txt"
+        sync_manager.run_sync(source, destination, exclude_file)
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        print("Example 1 failed.")
+
+    print("-" * 20)
+
+    # Example 2: Execute the script without the exclude file
+    try:
+        sync_manager.run_sync("/path/to/source2", "/path/to/destination2")
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        print("Example 2 failed.")
+        
+    # Clean up the dummy script
+    os.remove("dir_sync.sh")

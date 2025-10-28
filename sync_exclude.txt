@@ -1,0 +1,5 @@
+# rsync exclude file
+# patterns, subdirectories or files to exclude from rsync
+broken leg repair.jpg
+grandfather.jpg
+mom_et_al.jpg
