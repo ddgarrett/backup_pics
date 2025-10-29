@@ -13,10 +13,8 @@ class TogglePowerLed():
         script = os.path.join(script_dir, "blink.sh")
         self._process = subprocess.Popen(['sudo','bash', script], shell=False)
 
-
     def stop(self):
         """Stop shell subprocess """   
-
         print("Sending SIGTERM to the bash script...")
         self._process.terminate() # Sends SIGTERM
 
@@ -31,9 +29,7 @@ class TogglePowerLed():
             self._process.kill() # Sends SIGKILL if cleanup takes too long
             print("Bash script forcefully terminated.")
 
-
 if __name__ == "__main__":
- 
     # Create subprocess to blink red LED
     led  = TogglePowerLed()
 
