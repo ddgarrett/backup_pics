@@ -13,16 +13,20 @@ class DirSync:
     """
     A class to execute the dir_sync.sh bash script.
     
-    This class uses Python's subprocess module to run a bash script with
-    specified source, destination, and exclude file arguments.
+    This class uses Python's subprocess module to run a bash script to
+    synchronize directories, with specified source, destination, and exclude file arguments.
     """
-    def __init__(self, script_path: str):
+    def __init__(self, script_path=None):
         """
         Initializes the DirSync instance.
         
         Args:
             script_path (str): The full path to the dir_sync.sh script.
         """
+        if script_path is None:
+            script_dir = os.path.dirname(os.path.realpath(__file__))
+            script_path = os.path.join(script_dir, "dir_sync.sh")
+
         if not os.path.isfile(script_path):
             raise FileNotFoundError(f"The script file was not found: {script_path}")
         self.script_path = script_path
@@ -50,7 +54,7 @@ class DirSync:
         if exclude_file:
             command.append(exclude_file)
 
-        print(f"Executing command: {' '.join(command)}")
+        # print(f"Executing command: {' '.join(command)}")
         
         try:
             # Use subprocess.run for a straightforward, high-level approach.
@@ -59,7 +63,7 @@ class DirSync:
             # `text=True` decodes output to strings.
             result = subprocess.run(
                 command,
-                capture_output=True,
+                capture_output=False,
                 text=True,
                 check=True
             )
@@ -78,37 +82,24 @@ class DirSync:
 # --- Example Usage ---
 
 if __name__ == "__main__":
-    # Create a dummy shell script for demonstration
-    with open("dir_sync.sh", "w") as f:
-        f.write("#!/bin/bash\n\n")
-        f.write("echo \"Running sync from $1 to $2\"\n")
-        f.write("if [ -n \"$3\" ]; then\n")
-        f.write("    echo \"Using exclude file: $3\"\n")
-        f.write("fi\n")
-        f.write("echo \"Sync complete.\"\n")
-    
-    # Make the script executable
-    os.chmod("dir_sync.sh", 0o755)
+
+    ''' Requires Pixel and T7 SSD to be connected 
+        Exlcudes 3 pictures always kept on Pixel
+        and any .trashed pixel pictures
+    '''
 
     # Initialize the class with the script path
-    sync_manager = DirSync("./dir_sync.sh")
+    sync_manager = DirSync()
 
-    # Example 1: Execute the script with all arguments
-    try:
-        source = "/path/to/source"
-        destination = "/path/to/destination"
-        exclude_file = "exclude.txt"
-        sync_manager.run_sync(source, destination, exclude_file)
-    except (FileNotFoundError, subprocess.CalledProcessError):
-        print("Example 1 failed.")
+    source = "/run/user/1000/gvfs/mtp:host=Google_Pixel_8_Pro_42230DLJG0014Y/Internal shared storage/DCIM/Camera"
+    destination = "/home/dgarrett/Documents/pictures/MEDIA_BACKUP/yyyy-mm-dd_backup"
+    exclude_file = "sync_exclude.txt"
+    sync_manager.run_sync(source, destination, exclude_file)
 
-    print("-" * 20)
+    print("Pixel backed up")
 
-    # Example 2: Execute the script without the exclude file
-    try:
-        sync_manager.run_sync("/path/to/source2", "/path/to/destination2")
-    except (FileNotFoundError, subprocess.CalledProcessError):
-        print("Example 2 failed.")
-        
-    # Clean up the dummy script
-    os.remove("dir_sync.sh")
+    source = "/home/dgarrett/Documents/pictures/MEDIA_BACKUP/yyyy-mm-dd_backup"
+    destination = "/media/dgarrett/T7/pictures/MEDIA_BACKUP/yyyy-mm-dd_backup"
+    sync_manager.run_sync(source, destination, exclude_file)
+
+    print("RPi 5 Backed up to T7")
