@@ -18,7 +18,7 @@ import time
 from file_watcher import FileWatcher
 from json_config_reader import JsonConfigReader
 from blink_red_led import TogglePowerLed
-from directory_synchronizer import DirectorySynchronizer
+from dir_sync import DirectorySynchronizer
 
 class AutoBackup(threading.Thread):
     def __init__(self, local_backup_dir, sources, backups, backup_subdir, exclude_files, *args, **kwargs):
@@ -116,12 +116,12 @@ class AutoBackup(threading.Thread):
 if __name__ == "__main__":
     config = JsonConfigReader("config.json")
     local_backup_dir = config.get("local_backup_dir")
-    backup_subdir = config.get("backup_subdir", "yyyy-mm-dd_backup")
+    backup_subdir = config.get("backup_subdir")
     backups = config.get("backups", [])
     sources = config.get("sources", [])
-    exclude_files = set(config.get("exclude", []))
+    exclude_file = set(config.get("exclude"))
 
-    thread = AutoBackup(local_backup_dir,sources, backups, backup_subdir, exclude_files)
+    thread = AutoBackup(local_backup_dir,sources, backups, backup_subdir, exclude_file)
     thread.start()
 
     # Let thread run for a bit
