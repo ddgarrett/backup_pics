@@ -36,5 +36,5 @@ fi
 # --exclude-from= specify file with patterns to exclude
 # --dry-run: (optional) for testing, remove to perform actual copy
 #rsync -auv --progress "$SOURCE_DIR"/ "$DEST_DIR"
-rsync -auv --progress --exclude-from="$EXCLUDE_FILE" "$SOURCE_DIR"/ "$DEST_DIR"
+rsync -av --size-only --progress --exclude-from="$EXCLUDE_FILE" "$SOURCE_DIR"/ "$DEST_DIR"
 echo "New or updated files copied from '$SOURCE_DIR' to '$DEST_DIR'."
