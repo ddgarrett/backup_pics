@@ -60,6 +60,11 @@ class DirSync:
         print(f"Executing command: {' '.join(command)}.")
         print(f"--Check log file at {self.log_file} for details.")
 
+        with open(self.log_file, 'a') as log:
+            log.write(f"\n{'-'*40}\n")
+            log.write(f"from {source_dir}\n")
+            log.write(f"  to {dest_dir}\n\n")
+
         try:
             with open(self.log_file, 'a') as log:
                 # Use subprocess.run for a straightforward, high-level approach.
@@ -74,7 +79,8 @@ class DirSync:
                     text=True,
                     check=True
                 )
-                print("Script executed successfully.")
+                log.write(f"{'-'*40}\n")
+                # print("Script executed successfully.")
                 return result
         except FileNotFoundError:
             print("Error: The script or one of the directories was not found.")
