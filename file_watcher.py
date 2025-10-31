@@ -62,8 +62,17 @@ class FileWatcher:
             print(f"Successfully unmounted: {self.volume}")
             print(result.stdout)
         except subprocess.CalledProcessError as e:
-            print(f"Error unmounting {self.volume}:")
-            print(e.stderr)
+            print(f"Error unmounting {self.volume}: - retrying...")
+            # wait a few seconds and try again
+            time.sleep(3)
+            try:
+                result = subprocess.run(['gio', 'mount', '-u', self.volume], capture_output=True, text=True, check=True)
+                print(f"Successfully unmounted on second attempt: {self.volume}")
+                print(result.stdout)
+                return
+            except subprocess.CalledProcessError as e:
+                print(f"Error unmounting {self.volume}:")
+                print(e.stderr)
         except FileNotFoundError:
             print("Error: 'gio' command not found. Ensure GVFS tools are installed.")
 
