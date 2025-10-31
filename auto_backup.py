@@ -18,17 +18,20 @@ import time
 from file_watcher import FileWatcher
 from json_config_reader import JsonConfigReader
 from blink_red_led import TogglePowerLed
-from dir_sync import DirectorySynchronizer
+from dir_sync import DirSync
+from terminal_tailer import TerminalTailer
 
 class AutoBackup(threading.Thread):
-    def __init__(self, local_backup_dir, sources, backups, backup_subdir, exclude_files, *args, **kwargs):
+    def __init__(self, local_backup_dir, sources, backups, backup_subdir, exclude_file, rsync_log_file, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.local_backup_dir = local_backup_dir
         self._stop_event = threading.Event()
         self.sources = sources
         self.backups = backups
         self.backup_subdir = backup_subdir
-        self.exclude_files = exclude_files
+        self.exclude_file = exclude_file
+
+        self.sync_manager = DirSync(log_file=rsync_log_file)
 
         self.create_file_watchers()
 
@@ -78,14 +81,7 @@ class AutoBackup(threading.Thread):
                     dst = os.path.join(self.local_backup_dir, self.backup_subdir)
                     print(f"Backing up new files from '{watcher.file_path}' to '{dst}'...")
 
-                    print("waiting 5 seconds before dismounting since copy not yet in place...")
-                    time.sleep(5)
-
-                    # DirectorySynchronizer(
-                    #     os.path.join(watcher.mounted_path, watcher.directory, self.backup_subdir),
-                    #     os.path.join(self.local_backup_directory, self.backup_subdir),
-                    #     exclude_files=self.exclude_files
-                    # ).synchronize_new_files()
+                    self.sync_manager.run_sync(watcher.file_path, dst, self.exclude_file)
 
                     watcher.dismount()
                     print("dismounted")
@@ -102,9 +98,12 @@ class AutoBackup(threading.Thread):
                     # Create and start the thread to blink red LED
                     blink_led = TogglePowerLed()
 
-                    # TODO: Add code to backup new files from local backup directory to backup volume
-                    print("waiting 5 seconds before dismounting since copy not yet in place...")
-                    time.sleep(5)
+                    # Backup new files from local backup directory to backup volume
+                    src = os.path.join(self.local_backup_dir, self.backup_subdir)
+                    dst = os.path.join(watcher.file_path, self.backup_subdir)
+                    print(f"Backing up from '{src}' to '{dst}'...")
+
+                    self.sync_manager.run_sync(src, dst, self.exclude_file)
 
                     watcher.dismount()
                     print("dismounted")
@@ -119,14 +118,19 @@ if __name__ == "__main__":
     backup_subdir = config.get("backup_subdir")
     backups = config.get("backups", [])
     sources = config.get("sources", [])
-    exclude_file = set(config.get("exclude"))
+    exclude_file = config.get("exclude")
+    rsync_log_file = config.get("rsync_log_file", os.path.join(local_backup_dir, "rsync_log.txt"))
 
-    thread = AutoBackup(local_backup_dir,sources, backups, backup_subdir, exclude_file)
+    # show rsync log in terminal window
+    tailer = TerminalTailer(rsync_log_file, terminal_emulator="lxterminal") # Use "xterm" or "gnome-terminal" if lxterminal is not available
+    tailer.start_tailing()
+
+    # Create and start the AutoBackup thread
+    thread = AutoBackup(local_backup_dir,sources, backups, backup_subdir, exclude_file, rsync_log_file)
     thread.start()
 
-    # Let thread run for a bit
-    # To stop early, use [Ctrl]-c IF not in middle of a file copy
-    time.sleep(1000)
+    # run until user hits Enter
+    input("Press Enter to end auto backup...")
 
     # Stop thread from the main thread
     print("\nMain thread: Signalling Worker to stop...")
@@ -135,4 +139,7 @@ if __name__ == "__main__":
     # Wait for the thread to finish its execution
     thread.join()
 
+    # Stop tailing
+    tailer.stop_tailing()
+    
     print("\nMain thread: All threads have stopped.")

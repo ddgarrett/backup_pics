@@ -16,7 +16,7 @@ class DirSync:
     This class uses Python's subprocess module to run a bash script to
     synchronize directories, with specified source, destination, and exclude file arguments.
     """
-    def __init__(self, script_path=None):
+    def __init__(self, script_path=None, log_file="rsync_log.txt"):
         """
         Initializes the DirSync instance.
         
@@ -29,7 +29,9 @@ class DirSync:
 
         if not os.path.isfile(script_path):
             raise FileNotFoundError(f"The script file was not found: {script_path}")
+        
         self.script_path = script_path
+        self.log_file = log_file
         
     def run_sync(self, source_dir: str, dest_dir: str, exclude_file: Optional[str] = None):
         """
@@ -54,29 +56,34 @@ class DirSync:
         if exclude_file:
             command.append(exclude_file)
 
-        # print(f"Executing command: {' '.join(command)}")
-        
+        print(command)
+        print(f"Executing command: {' '.join(command)}.")
+        print(f"--Check log file at {self.log_file} for details.")
+
         try:
-            # Use subprocess.run for a straightforward, high-level approach.
-            # `check=True` will raise an exception if the script fails.
-            # `capture_output=True` captures stdout and stderr.
-            # `text=True` decodes output to strings.
-            result = subprocess.run(
-                command,
-                capture_output=False,
-                text=True,
-                check=True
-            )
-            print("Script executed successfully.")
-            return result
+            with open(self.log_file, 'a') as log:
+                # Use subprocess.run for a straightforward, high-level approach.
+                # `check=True` will raise an exception if the script fails.
+                # `capture_output=True` captures stdout and stderr.
+                # `text=True` decodes output to strings.
+                result = subprocess.run(
+                    command,
+                    capture_output=False,
+                    stdout=log,
+                    stderr=log,
+                    text=True,
+                    check=True
+                )
+                print("Script executed successfully.")
+                return result
         except FileNotFoundError:
             print("Error: The script or one of the directories was not found.")
             raise
         except subprocess.CalledProcessError as e:
             print("Error: Script execution failed.")
             print(f"Return code: {e.returncode}")
-            print(f"Standard output: {e.stdout}")
-            print(f"Standard error: {e.stderr}")
+            print(f"rsync command failed with error: {e}")
+            print(f"Error output can be found in {self.log_file}")
             raise
 
 # --- Example Usage ---
@@ -89,14 +96,14 @@ if __name__ == "__main__":
     '''
 
     # Initialize the class with the script path
-    sync_manager = DirSync()
-
-    source = "/run/user/1000/gvfs/mtp:host=Google_Pixel_8_Pro_42230DLJG0014Y/Internal shared storage/DCIM/Camera"
-    destination = "/home/dgarrett/Documents/pictures/MEDIA_BACKUP/yyyy-mm-dd_backup"
+    sync_manager = DirSync(log_file="/home/dgarrett/Documents/pictures/MEDIA_BACKUP/rsync_log.txt")
     exclude_file = "sync_exclude.txt"
-    sync_manager.run_sync(source, destination, exclude_file)
 
-    print("Pixel backed up")
+    # source = "/run/user/1000/gvfs/mtp:host=Google_Pixel_8_Pro_42230DLJG0014Y/Internal shared storage/DCIM/Camera"
+    # destination = "/home/dgarrett/Documents/pictures/MEDIA_BACKUP/yyyy-mm-dd_backup"
+    # sync_manager.run_sync(source, destination, exclude_file)
+
+    # print("Pixel backed up")
 
     source = "/home/dgarrett/Documents/pictures/MEDIA_BACKUP/yyyy-mm-dd_backup"
     destination = "/media/dgarrett/T7/pictures/MEDIA_BACKUP/yyyy-mm-dd_backup"

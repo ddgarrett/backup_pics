@@ -5,7 +5,8 @@
      "parameters":{}
     }
   ],
-  "local_backup_dir": "~/Documents/pictures/MEDIA_BACKUP",
+  "local_backup_dir": "/home/dgarrett/Documents/pictures/MEDIA_BACKUP",
+  "rsync_log_file": "/home/dgarrett/Documents/pictures/MEDIA_BACKUP/rsync_log.txt",
   "backup_subdir":"yyyy-mm-dd_backup",
   "exclude": "sync_exclude.txt",
   "sources": [
