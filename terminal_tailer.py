@@ -24,16 +24,13 @@ class TerminalTailer:
             print(f"Error: File '{self.filename}' not found.")
             return
 
-        command = [self.terminal_emulator, '-e', f'tail -f {self.filename}']
+        command = [self.terminal_emulator, '-e', f'tail -n 30 -f {self.filename}']
         try:
             self.process = subprocess.Popen(command)
             print(f"Tailing '{self.filename}' in a new {self.terminal_emulator} window.")
             
-        except FileNotFoundError:
-            print(f"Error: Terminal emulator '{self.terminal_emulator}' not found. "
-                  "Please ensure it is installed and in your PATH.")
         except Exception as e:
-            print(f"An error occurred while starting the terminal: {e}")
+            print(f"Error running {command}: {e}")
 
     def stop_tailing(self):
         """
