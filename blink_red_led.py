@@ -15,15 +15,15 @@ class TogglePowerLed():
 
     def stop(self):
         """Stop shell subprocess """   
-        print("Sending SIGTERM to the bash script...")
+        # print("Sending SIGTERM to the bash script...")
         self._process.terminate() # Sends SIGTERM
 
         # Wait for the bash script to finish its cleanup
         # timeout added to prevent indefinite waiting
         try:
-            print("Waiting for the bash script to finish...")
+            # print("Waiting for the bash script to finish...")
             self._process.wait(timeout=5) 
-            print("Bash script terminated gracefully after cleanup.")
+            # print("Bash script terminated gracefully after cleanup.")
         except subprocess.TimeoutExpired:
             print("Bash script did not terminate within the timeout. Sending SIGKILL.")
             self._process.kill() # Sends SIGKILL if cleanup takes too long

@@ -50,14 +50,15 @@ create_file_watchers()
 # print(backups)
 
 while True:
+    # TODO: start autobackup and then display menu
     # Check each source for files
     for source in sources:
         watcher = source.get("watcher")
         if watcher.find_file():
             print(f"Source '{source.get('descr', 'No description')}' found.")
-            # TODO: Add code to backup new files from source to local backup directory
-            print("waiting 5 seconds before dismounting...")
-            time.sleep(5)
+            # TODO: NOTE: this is done in auto backup - Add code to backup new files from source to local backup directory
+            # print("waiting 3 seconds before dismounting...")
+            time.sleep(3)
             watcher.dismount()
             print("dismounted")
 
@@ -66,8 +67,8 @@ while True:
         watcher = backup.get("watcher")
         if watcher.find_file():
             print(f"Backup '{backup.get('descr', 'No description')}' found.")
-            # TODO: Add code to backup new files from local backup directory to backup volume
-            print("waiting 5 seconds before dismounting...")
-            time.sleep(5)
+            # TODO: NOTE: this is done in auto backup - Add code to backup new files from local backup directory to backup volume
+            # print("waiting 5 seconds before dismounting...")
+            time.sleep(3)
             watcher.dismount()
             print("dismounted")

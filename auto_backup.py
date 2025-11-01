@@ -84,7 +84,7 @@ class AutoBackup(threading.Thread):
                     self.sync_manager.run_sync(watcher.file_path, dst, self.exclude_file)
 
                     watcher.dismount()
-                    print("dismounted")
+                    # print("dismounted")
 
                     # Stop blinking light
                     blink_led.stop()
@@ -106,7 +106,7 @@ class AutoBackup(threading.Thread):
                     self.sync_manager.run_sync(src, dst, self.exclude_file)
 
                     watcher.dismount()
-                    print("dismounted")
+                    # print("dismounted")
 
                     # Stop blinking light
                     blink_led.stop()
@@ -130,7 +130,7 @@ if __name__ == "__main__":
     thread.start()
 
     # run until user hits Enter
-    input("Press Enter to end auto backup...")
+    input("Press Enter to end auto backup...\n\n")
 
     # Stop thread from the main thread
     print("\nMain thread: Signalling Worker to stop...")

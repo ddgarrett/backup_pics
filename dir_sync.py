@@ -1,5 +1,6 @@
 import subprocess
 import os
+from datetime import datetime
 from typing import Optional
 
 ''' 
@@ -56,21 +57,19 @@ class DirSync:
         if exclude_file:
             command.append(exclude_file)
 
-        print(command)
-        print(f"Executing command: {' '.join(command)}.")
-        print(f"--Check log file at {self.log_file} for details.")
+        # print(command)
+        # print(f"Executing command: {' '.join(command)}.")
+        # print(f"--Check log file at {self.log_file} for details.")
 
+        start_dt = datetime.now()
         with open(self.log_file, 'a') as log:
-            log.write(f"\n{'-'*40}\n")
+            log.write(f"\n-------- {start_dt:%m-%d-%Y %H:%M} {'-'*40}\n")
             log.write(f"from {source_dir}\n")
             log.write(f"  to {dest_dir}\n\n")
 
         try:
             with open(self.log_file, 'a') as log:
-                # Use subprocess.run for a straightforward, high-level approach.
-                # `check=True` will raise an exception if the script fails.
-                # `capture_output=True` captures stdout and stderr.
-                # `text=True` decodes output to strings.
+
                 result = subprocess.run(
                     command,
                     capture_output=False,
@@ -79,7 +78,13 @@ class DirSync:
                     text=True,
                     check=True
                 )
-                log.write(f"{'-'*40}\n")
+                end_dt = datetime.now()
+                diff = end_dt - start_dt
+                min = int(diff.total_seconds() // 60)
+                sec = int(diff.total_seconds() % 60)
+
+                log.write(f"-------- elapsed: {min} min, {sec} sec {'-'*40}\n")
+
                 # print("Script executed successfully.")
                 return result
         except FileNotFoundError:

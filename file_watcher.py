@@ -41,7 +41,7 @@ class FileWatcher:
         """
         for attempt in range(self.max_retries + 1):
             if os.path.exists(self.file_path):
-                print(f"File found at: {self.file_path}")
+                # print(f"File found at: {self.file_path}")
                 return True
             else:
                 if attempt < self.max_retries:
@@ -64,7 +64,7 @@ class FileWatcher:
         except subprocess.CalledProcessError as e:
             print(f"Error unmounting {self.volume}: - retrying...")
             # wait a few seconds and try again
-            time.sleep(3)
+            time.sleep(5)
             try:
                 result = subprocess.run(['gio', 'mount', '-u', self.volume], capture_output=True, text=True, check=True)
                 print(f"Successfully unmounted on second attempt: {self.volume}")
