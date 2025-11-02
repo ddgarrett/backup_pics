@@ -1,5 +1,10 @@
 # rsync exclude file
 # patterns, subdirectories or files to exclude from rsync
+
+# Olympus TG-7 Serial Number
+P5190001.JPG
+
+# Pixel permanent and deleted photos
 broken leg repair.jpg
 grandfather.jpg
 mom_et_al.jpg
