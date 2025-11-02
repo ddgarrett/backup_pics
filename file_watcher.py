@@ -59,8 +59,8 @@ class FileWatcher:
         try:
             # Use gio to dismount the MTP device
             result = subprocess.run(['gio', 'mount', '-u', self.volume], capture_output=True, text=True, check=True)
-            print(f"Successfully unmounted: {self.volume}")
-            print(result.stdout)
+            # print(f"Successfully unmounted: {self.volume}")
+            # print(result.stdout)
         except subprocess.CalledProcessError as e:
             print(f"Error unmounting {self.volume}: - retrying...")
             # wait a few seconds and try again
@@ -68,7 +68,7 @@ class FileWatcher:
             try:
                 result = subprocess.run(['gio', 'mount', '-u', self.volume], capture_output=True, text=True, check=True)
                 print(f"Successfully unmounted on second attempt: {self.volume}")
-                print(result.stdout)
+                #print(result.stdout)
                 return
             except subprocess.CalledProcessError as e:
                 print(f"Error unmounting {self.volume}:")

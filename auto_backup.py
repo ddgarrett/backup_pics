@@ -12,6 +12,7 @@
 
 '''
 
+from datetime import datetime
 import os
 import threading
 import time
@@ -72,6 +73,8 @@ class AutoBackup(threading.Thread):
             for source in self.sources:
                 watcher = source.get("watcher")
                 if watcher.find_file():
+                    start_dt = datetime.now()
+                    print((f"\n-------- {start_dt:%m-%d-%Y %H:%M} {'-'*40}"))
                     print(f"Source '{source.get('descr', 'No description')}' found.")
 
                     # Create and start the thread to blink red LED
@@ -84,7 +87,9 @@ class AutoBackup(threading.Thread):
                     self.sync_manager.run_sync(watcher.file_path, dst, self.exclude_file)
 
                     watcher.dismount()
-                    # print("dismounted")
+                    print(f"Source '{source.get('descr', 'No description')}' copied to local backup directory.")
+                    print(f"Source '{source.get('descr', 'No description')}' dismounted.")
+                    print("Waiting for new media source or backup...")
 
                     # Stop blinking light
                     blink_led.stop()
@@ -93,6 +98,8 @@ class AutoBackup(threading.Thread):
             for backup in self.backups:
                 watcher = backup.get("watcher")
                 if watcher.find_file():
+                    start_dt = datetime.now()
+                    print((f"\n-------- {start_dt:%m-%d-%Y %H:%M} {'-'*40}"))
                     print(f"Backup '{backup.get('descr', 'No description')}' found.")
 
                     # Create and start the thread to blink red LED
@@ -106,7 +113,9 @@ class AutoBackup(threading.Thread):
                     self.sync_manager.run_sync(src, dst, self.exclude_file)
 
                     watcher.dismount()
-                    # print("dismounted")
+                    print(f"Local backup copied to '{backup.get('descr', 'No description')}'")
+                    print(f"Backup '{backup.get('descr', 'No description')}' dismounted.")
+                    print("Waiting for new media source or backup...")
 
                     # Stop blinking light
                     blink_led.stop()

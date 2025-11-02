@@ -11,7 +11,12 @@ class TogglePowerLed():
         """ Start Shell subprocess to blink red LED """
         script_dir = os.path.dirname(os.path.realpath(__file__))
         script = os.path.join(script_dir, "blink.sh")
-        self._process = subprocess.Popen(['sudo','bash', script], shell=False)
+        self._process = subprocess.Popen(
+            ['sudo','bash', script], 
+            stdout=subprocess.PIPE, 
+            stderr=subprocess.PIPE,
+            text=True,
+            shell=False)
 
     def stop(self):
         """Stop shell subprocess """   

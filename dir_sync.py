@@ -84,8 +84,6 @@ class DirSync:
                 sec = int(diff.total_seconds() % 60)
 
                 log.write(f"-------- elapsed: {min} min, {sec} sec {'-'*40}\n")
-
-                # print("Script executed successfully.")
                 return result
         except FileNotFoundError:
             print("Error: The script or one of the directories was not found.")
