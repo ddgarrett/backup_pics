@@ -9,3 +9,6 @@ broken leg repair.jpg
 grandfather.jpg
 mom_et_al.jpg
 .trashed*.*
+
+# ios extra stuff
+._*
