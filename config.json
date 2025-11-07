@@ -17,8 +17,10 @@
      "directory":"DCIM/100OMSYS", "descr":"TG-7 Olympus Camera 64 GB primary microSD Card" },
 
     {"volume":"/media/dgarrett/3835-3539",
-     "directory":"DCIM/100OMSYS", "descr":"TG-7 Olympus Camera 32 GB backup microSD Card" }
+     "directory":"DCIM/100OMSYS", "descr":"TG-7 Olympus Camera 32 GB backup microSD Card" },
 
+    {"volume":"/media/dgarrett/6EB1-CD5C", "delete_copied": true,
+     "directory":"TRANSFERS/yyyy-mm-dd_mac_xfer", "descr":"Red+Black SanDisk Ultra 32 GB Photo Transfer" }
   ],
   "backups": [
     {"volume":"/media/dgarrett/T7",          "directory":"pictures/MEDIA_BACKUP", 
