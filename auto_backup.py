@@ -18,7 +18,7 @@ import threading
 import time
 from file_watcher import FileWatcher
 from json_config_reader import JsonConfigReader
-from blink_red_led import TogglePowerLed
+from blink_led import ToggleLed
 from dir_sync import DirSync
 from terminal_tailer import TerminalTailer
 
@@ -33,6 +33,9 @@ class AutoBackup(threading.Thread):
         self.exclude_file = exclude_file
 
         self.sync_manager = DirSync(log_file=rsync_log_file)
+
+        self.red_led_blink_rate = 0.25 
+        self.green_led_blink_rate = 0.75
 
         self.create_file_watchers()
 
@@ -65,6 +68,10 @@ class AutoBackup(threading.Thread):
         return self._stop_event.is_set()
     
     def run(self):
+
+        # Start Green Slow blink LED
+        blink_led = ToggleLed(color="green", rate=self.green_led_blink_rate)
+
         while not self.stopped():
             # Wait between checks
             time.sleep(3)
@@ -77,8 +84,9 @@ class AutoBackup(threading.Thread):
                     print((f"\n-------- {start_dt:%m-%d-%Y %H:%M} {'-'*40}"))
                     print(f"Source '{source.get('descr', 'No description')}' found.")
 
-                    # Create and start the thread to blink red LED
-                    blink_led = TogglePowerLed()
+                    # Stop Green LED blink and start red LED blink
+                    blink_led.stop()
+                    blink_led = ToggleLed(color="red", rate=self.red_led_blink_rate)
 
                     # Backup new files from source to local backup directory
                     dst = os.path.join(self.local_backup_dir, self.backup_subdir)
@@ -91,8 +99,9 @@ class AutoBackup(threading.Thread):
                     print(f"Source '{source.get('descr', 'No description')}' dismounted.")
                     print("Waiting for new media source or backup...")
 
-                    # Stop blinking light
+                    # Stop red blinking and restart green blink
                     blink_led.stop()
+                    blink_led = ToggleLed(color="green", rate=self.green_led_blink_rate)
 
             # Check each backup for files
             for backup in self.backups:
@@ -102,8 +111,9 @@ class AutoBackup(threading.Thread):
                     print((f"\n-------- {start_dt:%m-%d-%Y %H:%M} {'-'*40}"))
                     print(f"Backup '{backup.get('descr', 'No description')}' found.")
 
-                    # Create and start the thread to blink red LED
-                    blink_led = TogglePowerLed()
+                    # Stop Green LED blink and start red LED blink
+                    blink_led.stop()
+                    blink_led = ToggleLed(color="red", rate=self.red_led_blink_rate)
 
                     # Backup new files from local backup directory to backup volume
                     src = os.path.join(self.local_backup_dir, self.backup_subdir)
@@ -117,8 +127,9 @@ class AutoBackup(threading.Thread):
                     print(f"Backup '{backup.get('descr', 'No description')}' dismounted.")
                     print("Waiting for new media source or backup...")
 
-                    # Stop blinking light
+                    # Stop red blinking and restart green blink
                     blink_led.stop()
+                    blink_led = ToggleLed(color="green", rate=self.green_led_blink_rate)
             
 
 if __name__ == "__main__":

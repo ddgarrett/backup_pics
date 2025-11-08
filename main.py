@@ -17,7 +17,7 @@
 import time
 from file_watcher import FileWatcher
 from json_config_reader import JsonConfigReader
-from blink_red_led import TogglePowerLed
+from blink_led import ToggleLed
 
 config = JsonConfigReader("config.json")
 backup_subdir = config.get("backup_subdirectory", "yyyy-mm-dd_backup")
