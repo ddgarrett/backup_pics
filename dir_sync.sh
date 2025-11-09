@@ -35,6 +35,7 @@ fi
 # --progress: show progress during transfer
 # --exclude-from= specify file with patterns to exclude
 # --dry-run: (optional) for testing, remove to perform actual copy
+# --no-perms: do not preserve permissions - caused problems with iOS and possibly others
 #rsync -auv --progress "$SOURCE_DIR"/ "$DEST_DIR"
-rsync -ahv --size-only --progress --exclude-from="$EXCLUDE_FILE" "$SOURCE_DIR"/ "$DEST_DIR"
+rsync -ahv --size-only --no-perms --progress --exclude-from="$EXCLUDE_FILE" "$SOURCE_DIR"/ "$DEST_DIR"
 # echo "New or updated files copied from '$SOURCE_DIR' to '$DEST_DIR'."

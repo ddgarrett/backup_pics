@@ -10,10 +10,6 @@
         if drive is a backup volume, copy from new photos and videos in local backup directory to backup volume
     3. Dismount the external drive
 
-
-    TODO: fix permissions on local drive after iPad (or iPhone?) backup?
-      > chmod -R a+rX yyyy-mm-dd_backup/
-
 '''
 
 from datetime import datetime
