@@ -10,6 +10,10 @@
         if drive is a backup volume, copy from new photos and videos in local backup directory to backup volume
     3. Dismount the external drive
 
+
+    TODO: fix permissions on local drive after iPad (or iPhone?) backup?
+      > chmod -R a+rX yyyy-mm-dd_backup/
+
 '''
 
 from datetime import datetime
@@ -92,7 +96,10 @@ class AutoBackup(threading.Thread):
                     dst = os.path.join(self.local_backup_dir, self.backup_subdir)
                     print(f"Backing up new files from '{watcher.file_path}' to '{dst}'...")
 
-                    self.sync_manager.run_sync(watcher.file_path, dst, self.exclude_file)
+                    try:
+                        self.sync_manager.run_sync(watcher.file_path, dst, self.exclude_file)
+                    except Exception as e:
+                        print(f"Error occurred while syncing: {e}")
 
                     watcher.dismount()
                     print(f"Source '{source.get('descr', 'No description')}' copied to local backup directory.")

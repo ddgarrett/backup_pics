@@ -13,6 +13,9 @@
     {"volume":"/run/user/1000/gvfs/mtp:host=Google_Pixel_8_Pro_42230DLJG0014Y",
      "directory":"Internal shared storage/DCIM/Camera", "descr":"Google Pixel 8 Pro" },
 
+    {"volume":"/run/user/1000/gvfs/gphoto2:host=Apple_Inc._iPad_00008120000144D904414032",
+     "directory":"", "descr":"iPad photos" },
+
     {"volume":"/media/dgarrett/OM SYSTEM",
      "directory":"DCIM/100OMSYS", "descr":"TG-7 Olympus Camera 64 GB primary microSD Card" },
 
