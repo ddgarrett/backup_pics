@@ -32,6 +32,8 @@ fi
 # -a: archive mode (preserves permissions, timestamps, ownership, etc.)
 # -u: update (skip files that are newer in dest)
 # -v: verbose (show files being transferred)
+# -h: human-readable output
+# --size-only: compare files based on size only
 # --progress: show progress during transfer
 # --exclude-from= specify file with patterns to exclude
 # --dry-run: (optional) for testing, remove to perform actual copy
