@@ -1,74 +1,45 @@
 '''
-    Backup Photos on Cell Phone and SD Cards
+    Backup Photos on Cell Phone, SD Cards and iOS Devices
 
-    config.json lists the sources to watch for and backup destinations and folders.
-
-    Program:
-    1. Wait for the external drive to be mounted
-    2. When found,
-        if drive is a source volume copy new photos and videos to local backup directory
-        if drive is a backup volume, copy from new photos and videos in local backup directory to backup volume
-    3. Dismount the external drive
-
-
+    config.json lists the sources to watch for 
+    and backup destinations and folders.
 
 '''
+import os
 
-import time
-from file_watcher import FileWatcher
+from auto_backup import AutoBackup
 from json_config_reader import JsonConfigReader
-from blink_led import ToggleLed
+from terminal_tailer import TerminalTailer
 
-config = JsonConfigReader("config.json")
-backup_subdir = config.get("backup_subdirectory", "yyyy-mm-dd_backup")
-backups = config.get("backups", [])
-sources = config.get("sources", [])
-exclude_files = set(config.get("exclude", []))
 
-def create_file_watchers():
-    # Create File Watchers for each source and backup volume
-    for source in sources:
-        source_volume = source.get("volume")
-        source_directory = source.get("directory")
-        source_descr = source.get("descr", "No description")
+if __name__ == "__main__":
+    config = JsonConfigReader("config.json")
+    local_backup_dir = config.get("local_backup_dir")
+    backup_subdir = config.get("backup_subdir")
+    backups = config.get("backups", [])
+    sources = config.get("sources", [])
+    exclude_file = config.get("exclude")
+    rsync_log_file = config.get("rsync_log_file", os.path.join(local_backup_dir, "rsync_log.txt"))
 
-        print(f"Watching for {source_descr}...")
-        watcher = FileWatcher(source_volume,source_directory)
-        source["watcher"] = watcher
+    # show rsync log in terminal window
+    tailer = TerminalTailer(rsync_log_file, terminal_emulator="lxterminal") # Use "xterm" or "gnome-terminal" if lxterminal is not available
+    tailer.start_tailing()
 
-    for backup in backups:
-        backup_volume = backup.get("volume")
-        backup_directory = backup.get("directory")
-        backup_descr = backup.get("descr", "No description")
+    # Create and start the AutoBackup thread
+    thread = AutoBackup(local_backup_dir,sources, backups, backup_subdir, exclude_file, rsync_log_file)
+    thread.start()
 
-        print(f"Watching for {backup_descr}...")
-        watcher = FileWatcher(backup_volume,backup_directory)
-        backup["watcher"] = watcher
+    # run until user hits Enter
+    input("Press Enter to end auto backup...\n\n")
 
-create_file_watchers()
-# print(sources)
-# print(backups)
+    # Stop thread from the main thread
+    print("\nMain thread: Signalling Worker to stop...")
+    thread.stop()
 
-while True:
-    # TODO: start autobackup and then display menu
-    # Check each source for files
-    for source in sources:
-        watcher = source.get("watcher")
-        if watcher.find_file():
-            print(f"Source '{source.get('descr', 'No description')}' found.")
-            # TODO: NOTE: this is done in auto backup - Add code to backup new files from source to local backup directory
-            # print("waiting 3 seconds before dismounting...")
-            time.sleep(3)
-            watcher.dismount()
-            print("dismounted")
+    # Wait for the thread to finish its execution
+    thread.join()
 
-    # Check each backup for files
-    for backup in backups:
-        watcher = backup.get("watcher")
-        if watcher.find_file():
-            print(f"Backup '{backup.get('descr', 'No description')}' found.")
-            # TODO: NOTE: this is done in auto backup - Add code to backup new files from local backup directory to backup volume
-            # print("waiting 5 seconds before dismounting...")
-            time.sleep(3)
-            watcher.dismount()
-            print("dismounted")
+    # Stop tailing
+    tailer.stop_tailing()
+    
+    print("\nMain thread: All threads have stopped.")
