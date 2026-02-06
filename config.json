@@ -35,11 +35,14 @@
     {"volume":"/media/dgarrett/My Passport", "directory":"pictures/MEDIA_BACKUP", 
      "descr":"My Passport 2ndary home based WD HDD - 4 TB"},
 
-    {"volume":"/media/dgarrett/SSD02",       "directory":"pictures/MEDIA_BACKUP", 
-     "descr":"unused  - 2 TB exFAT SanDisk SSD"},
-
     {"volume":"/media/dgarrett/Seagate Backup Plus Drive", "directory":"pictures/MEDIA_BACKUP", 
      "descr":"unused - 1 TB NTFS Seagate HDD"}
+
+  ],
+
+  "No Longer Used": [
+    {"volume":"/media/dgarrett/SSD02",       "directory":"pictures/MEDIA_BACKUP", 
+     "descr":"unused  - 2 TB exFAT SanDisk SSD - now used for Mac Time Machine backup"}
 
   ]
 }
