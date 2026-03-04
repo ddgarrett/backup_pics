@@ -38,8 +38,10 @@ class TerminalTailer:
         """
         if self.process:
             self.process.terminate()
-            print("Terminal process terminated.")
+            print("Terminal Tailer process terminated.")
             self.process = None
+        else:
+            print("No Terminal Tailer process to terminate.")
 
 # Example Usage:
 if __name__ == "__main__":
