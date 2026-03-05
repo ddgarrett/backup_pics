@@ -1,200 +1,211 @@
-import tkinter as tk
-from tkinter import ttk, messagebox
-import sv_ttk
+"""
+Menu GUI for backup_pics on Raspberry Pi 5.
 
-'''
-python 3.11 TKinter program to display a list of functions and allow you to select one of the functions to run. 
-Each function would have a lookup table that defines the python program to run for a given function.
-Give the TKinter UI a modern look and feel. 
-Include a visible list of all available functions and execute the function when an item in the list is clicked.
+- Starts main.py (backup) automatically when the menu is opened.
+- Option 1: Start/Stop the backup process (main.py).
+- Option 2: Start/Stop the Pic Quality Review process (placeholder).
+- Option 3: Exit — stop all processes and close the program.
 
 Prereq: pip install sv-ttk
+"""
+import os
+import signal
+import subprocess
+import sys
+import tkinter as tk
+from tkinter import ttk, messagebox
 
-'''
+# Optional modern theme (Raspberry Pi: pip install sv-ttk)
+try:
+    import sv_ttk
+    HAS_SV_TTK = True
+except ImportError:
+    HAS_SV_TTK = False
 
-
-# --- Function Definitions ---
-# Each function to be run needs to be defined here.
-# You can add more functions as needed.
-def say_hello(caller):
-    item = caller.function_listbox.curselection()[0]
-
-    if caller.backup_running:
-        msg = "Stop Backup Monitor?"
-    else:
-        msg = "Start Backup Monitor?"
-
-    response = messagebox.askokcancel("Backup", msg)
-    print("message hello box closed, response:", response)
-    if response:
-        if caller.backup_running:
-            print("stopping backup...")
-            caller.backup_running = False
-            item_txt = f'{item + 1}. Start Backup Monitor?'
-            caller.function_listbox.delete(item)
-            caller.function_listbox.insert(item, item_txt)
-        else:
-            print("starting backup...")
-            caller.backup_running = True
-            item_txt = f'{item + 1}. Stop Backup Monitor?'
-            caller.function_listbox.delete(item)
-            caller.function_listbox.insert(item, item_txt)
-
-        caller.function_listbox.selection_clear(0, tk.END)
-        caller.function_listbox.selection_set(item)
-
-def show_message(caller):
-    messagebox.showinfo("Function Executed", "This is a custom message from function 2.")
-
-def display_info(caller):
-    messagebox.showinfo("Function Executed", "Function 3: Here is some important information.")
-
-def run_task(caller):
-    messagebox.showinfo("Function Executed", "Running a generic task for function 4.")
+# Project root = directory containing this script
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+MAIN_PY = os.path.join(SCRIPT_DIR, "main.py")
+PIC_QUALITY_SCRIPT = os.path.join(SCRIPT_DIR, "pic_quality_review.py")
 
 
-# --- Lookup Table (Dictionary) ---
-# This dictionary maps the function number and name to the actual function reference.
-# The keys are used to populate the listbox and can be used for direct access.
-function_lookup = {
-    1: {"name": "Start Backup Monitor?", "function": say_hello},
-    2: {"name": "Show a Message", "function": show_message},
-    3: {"name": "Display Information", "function": display_info},
-    4: {"name": "Run a Task", "function": run_task}
-}
-
-class FunctionRunnerApp(tk.Tk):
-    def __init__(self,parms):
-        super().__init__()
-
-        self.backup_running = False
-
-        self.title("Function Runner")
-        self.geometry("500x400")
-
-        # Set the modern theme from sv-ttk
-        sv_ttk.set_theme("light")
-
-        # Create the main frame with padding
-        main_frame = ttk.Frame(self, padding=20)
-        main_frame.pack(fill="both", expand=True)
-
-        # Title Label
-        title_label = ttk.Label(
-            main_frame,
-            text="Select a function to run",
-            font=("Helvetica", 16, "bold")
-        )
-        title_label.pack(pady=(0, 20))
-
-        # --- Function Listbox ---
-        list_label = ttk.Label(main_frame, text="Available Functions:")
-        list_label.pack(anchor="w")
-
-        listbox_frame = ttk.Frame(main_frame)
-        listbox_frame.pack(fill="both", expand=True, pady=(5, 10))
-
-        self.function_listbox = tk.Listbox(listbox_frame, height=10, font=("Helvetica", 12))
-        self.function_listbox.pack(side="left", fill="both", expand=True)
-
-        # Populate the listbox with function names
-        self.populate_listbox()
-
-        # Add a scrollbar
-        scrollbar = ttk.Scrollbar(listbox_frame, orient="vertical", command=self.function_listbox.yview)
-        scrollbar.pack(side="right", fill="y")
-        self.function_listbox.config(yscrollcommand=scrollbar.set)
-
-        # Bind listbox events to the handler
-        self.function_listbox.bind("<Double-1>", self.on_listbox_select)
-        self.function_listbox.bind("<Return>", self.on_listbox_select)
-
-        # --- Entry for Typing Function Number ---
-        entry_frame = ttk.Frame(main_frame)
-        entry_frame.pack(fill="x", pady=10)
-
-        entry_label = ttk.Label(entry_frame, text="Type function number and press Enter:")
-        entry_label.pack(side="left", padx=(0, 10))
-
-        self.function_entry = ttk.Entry(entry_frame, width=5)
-        self.function_entry.pack(side="left")
-
-        # Bind the Enter key to the entry widget and listbox
-        self.function_entry.bind("<Return>", self.on_entry_enter)
-
-        # --- Run Button ---
-        run_button = ttk.Button(
-            main_frame,
-            text="Run Selected Function",
-            command=self.run_function_from_listbox,
-            style="Accent.TButton"  # Use a theme-specific accent style
-        )
-        run_button.pack(pady=10)
-
-        # Add a status bar
-        self.status_label = ttk.Label(main_frame, text="Ready.", relief="groove")
-        self.status_label.pack(side="bottom", fill="x", pady=(10, 0))
-
-    def populate_listbox(self):
-        """Populates the listbox with function names from the lookup table."""
-        for num, func_data in function_lookup.items():
-            self.function_listbox.insert(tk.END, f"{num}. {func_data['name']}")
-
-    def run_function(self, function_number):
-        """Executes the function from the lookup table based on the number."""
+def _kill_process_and_children(proc):
+    """Terminate process and its process group (so child processes like lxterminal are also stopped)."""
+    if proc is None or proc.poll() is not None:
+        return
+    try:
+        # Process was started with start_new_session=True, so we can kill the group
+        os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+    except (ProcessLookupError, OSError):
         try:
-            func_data = function_lookup[function_number]
-            self.update_status(f"Executing: {func_data['name']}...")
-            self.after(100, lambda: func_data['function'](self))
-            self.update_status(f"Execution complete for: {func_data['name']}")
-        except KeyError:
-            messagebox.showerror("Error", f"Function number {function_number} not found.")
-            self.update_status("Error: Invalid function number.")
-        except Exception as e:
-            messagebox.showerror("Error", f"An error occurred: {e}")
-            self.update_status("Error during execution.")
-
-    def on_listbox_select(self, event):
-        """Handler for listbox selection."""
-        try:
-            selected_index = self.function_listbox.curselection()[0]
-            function_number = selected_index + 1
-            self.run_function(function_number)
-        except IndexError:
-            # Handle case where selection is cleared
+            proc.terminate()
+        except OSError:
             pass
 
-    def on_entry_enter(self, event):
-        """Handler for Enter key press in the entry widget."""
+
+class BackupMenuApp(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.backup_process = None
+        self.pic_review_process = None
+        self._poll_id = None
+
+        self.title("Backup Pics – Menu")
+        self.geometry("420x280")
+        self.minsize(320, 220)
+
+        if HAS_SV_TTK:
+            sv_ttk.set_theme("light")
+
+        main_frame = ttk.Frame(self, padding=24)
+        main_frame.pack(fill="both", expand=True)
+
+        ttk.Label(
+            main_frame,
+            text="Backup Pics",
+            font=("Helvetica", 18, "bold"),
+        ).pack(pady=(0, 20))
+
+        # Option 1: Start/Stop Backup
+        self.btn_backup = ttk.Button(
+            main_frame,
+            text="Stop Backup",
+            command=self._toggle_backup,
+            width=28,
+        )
+        self.btn_backup.pack(pady=8, fill="x")
+
+        # Option 2: Start/Stop Pic Quality Review
+        self.btn_pic_review = ttk.Button(
+            main_frame,
+            text="Start Pic Quality Review",
+            command=self._toggle_pic_review,
+            width=28,
+        )
+        self.btn_pic_review.pack(pady=8, fill="x")
+
+        # Option 3: Exit
+        ttk.Button(
+            main_frame,
+            text="Exit",
+            command=self._exit_app,
+            width=28,
+        ).pack(pady=8, fill="x")
+
+        self.status_label = ttk.Label(main_frame, text="Starting backup…", relief="flat")
+        self.status_label.pack(side="bottom", fill="x", pady=(16, 0))
+
+        self.protocol("WM_DELETE_WINDOW", self._exit_app)
+
+        # Start backup process on launch
+        self.after(100, self._start_backup)
+        self._start_poll()
+
+    def _start_poll(self):
+        """Periodically update button labels if a process exits on its own."""
+        self._update_labels_from_processes()
+        self._poll_id = self.after(1000, self._start_poll)
+
+    def _update_labels_from_processes(self):
+        """Refresh Backup and Pic Review button text from actual process state."""
+        if self.backup_process is not None and self.backup_process.poll() is not None:
+            self.backup_process = None
+            self.btn_backup.config(text="Start Backup")
+            self.status_label.config(text="Backup stopped.")
+        if self.pic_review_process is not None and self.pic_review_process.poll() is not None:
+            self.pic_review_process = None
+            self.btn_pic_review.config(text="Start Pic Quality Review")
+            self.status_label.config(text="Pic Quality Review stopped.")
+
+    def _toggle_backup(self):
+        if self.backup_process is not None and self.backup_process.poll() is None:
+            self._stop_backup()
+        else:
+            self._start_backup()
+
+    def _start_backup(self):
+        if self.backup_process is not None and self.backup_process.poll() is None:
+            self.status_label.config(text="Backup already running.")
+            return
         try:
-            entry = self.function_entry.get().strip()
-            if len(entry) == 0:
-                function_number = self.function_listbox.curselection()[0] + 1
-            else:
-                function_number = int(entry)
+            self.backup_process = subprocess.Popen(
+                [sys.executable, MAIN_PY],
+                cwd=SCRIPT_DIR,
+                start_new_session=True,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            self.btn_backup.config(text="Stop Backup")
+            self.status_label.config(text="Backup running.")
+        except FileNotFoundError:
+            self.status_label.config(text="Error: main.py not found.")
+            messagebox.showerror("Error", f"Could not find:\n{MAIN_PY}")
+        except Exception as e:
+            self.status_label.config(text="Error starting backup.")
+            messagebox.showerror("Error", f"Failed to start backup:\n{e}")
 
-            self.function_listbox.selection_clear(0, tk.END)
-            self.function_listbox.select_set(function_number - 1)
-            self.run_function(function_number)
-            self.function_entry.delete(0, tk.END)  # Clear entry box
-        except ValueError:
-            messagebox.showerror("Error", "Please enter a valid number.")
-            self.update_status("Error: Invalid input.")
+    def _stop_backup(self):
+        if self.backup_process is None or self.backup_process.poll() is not None:
+            self.backup_process = None
+            self.btn_backup.config(text="Start Backup")
+            return
+        _kill_process_and_children(self.backup_process)
+        self.backup_process = None
+        self.btn_backup.config(text="Start Backup")
+        self.status_label.config(text="Backup stopped.")
 
-    def run_function_from_listbox(self):
-        """Handler for the 'Run Selected Function' button."""
+    def _toggle_pic_review(self):
+        if self.pic_review_process is not None and self.pic_review_process.poll() is None:
+            self._stop_pic_review()
+        else:
+            self._start_pic_review()
+
+    def _start_pic_review(self):
+        if self.pic_review_process is not None and self.pic_review_process.poll() is None:
+            self.status_label.config(text="Pic Quality Review already running.")
+            return
         try:
-            selected_index = self.function_listbox.curselection()[0]
-            function_number = selected_index + 1
-            self.run_function(function_number)
-        except IndexError:
-            messagebox.showwarning("Warning", "Please select a function from the list first.")
+            self.pic_review_process = subprocess.Popen(
+                [sys.executable, PIC_QUALITY_SCRIPT],
+                cwd=SCRIPT_DIR,
+                start_new_session=True,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            self.btn_pic_review.config(text="Stop Pic Quality Review")
+            self.status_label.config(text="Pic Quality Review running.")
+        except FileNotFoundError:
+            self.status_label.config(text="Error: pic_quality_review.py not found.")
+            messagebox.showerror("Error", f"Could not find:\n{PIC_QUALITY_SCRIPT}")
+        except Exception as e:
+            self.status_label.config(text="Error starting Pic Quality Review.")
+            messagebox.showerror("Error", f"Failed to start Pic Quality Review:\n{e}")
 
-    def update_status(self, message):
-        """Updates the status bar with a given message."""
-        self.status_label.config(text=message)
+    def _stop_pic_review(self):
+        if self.pic_review_process is None or self.pic_review_process.poll() is not None:
+            self.pic_review_process = None
+            self.btn_pic_review.config(text="Start Pic Quality Review")
+            return
+        _kill_process_and_children(self.pic_review_process)
+        self.pic_review_process = None
+        self.btn_pic_review.config(text="Start Pic Quality Review")
+        self.status_label.config(text="Pic Quality Review stopped.")
+
+    def _exit_app(self):
+        if self._poll_id is not None:
+            self.after_cancel(self._poll_id)
+            self._poll_id = None
+        self.status_label.config(text="Stopping all processes…")
         self.update_idletasks()
+        _kill_process_and_children(self.backup_process)
+        _kill_process_and_children(self.pic_review_process)
+        self.backup_process = None
+        self.pic_review_process = None
+        self.quit()
+        self.destroy()
+
 
 if __name__ == "__main__":
-    app = FunctionRunnerApp()
+    app = BackupMenuApp()
     app.mainloop()
