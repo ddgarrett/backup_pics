@@ -6,6 +6,8 @@ Menu GUI for backup_pics on Raspberry Pi 5.
 - Option 2: Start/Stop the Pic Quality Review process (placeholder).
 - Option 3: Exit — stop all processes and close the program.
 
+When starting the backup, it is run in a new visible terminal so backup messages are visible.
+
 Prereq: pip install sv-ttk
 """
 import os
@@ -14,6 +16,8 @@ import subprocess
 import sys
 import tkinter as tk
 from tkinter import ttk, messagebox
+
+from backup_process import BackupProcess
 
 # Optional modern theme (Raspberry Pi: pip install sv-ttk)
 try:
@@ -24,16 +28,14 @@ except ImportError:
 
 # Project root = directory containing this script
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-MAIN_PY = os.path.join(SCRIPT_DIR, "main.py")
 PIC_QUALITY_SCRIPT = os.path.join(SCRIPT_DIR, "pic_quality_review.py")
 
 
 def _kill_process_and_children(proc):
-    """Terminate process and its process group (so child processes like lxterminal are also stopped)."""
+    """Terminate process and its process group (so child processes are also stopped)."""
     if proc is None or proc.poll() is not None:
         return
     try:
-        # Process was started with start_new_session=True, so we can kill the group
         os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
     except (ProcessLookupError, OSError):
         try:
@@ -45,7 +47,7 @@ def _kill_process_and_children(proc):
 class BackupMenuApp(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.backup_process = None
+        self.backup_runner = BackupProcess(SCRIPT_DIR)
         self.pic_review_process = None
         self._poll_id = None
 
@@ -107,8 +109,7 @@ class BackupMenuApp(tk.Tk):
 
     def _update_labels_from_processes(self):
         """Refresh Backup and Pic Review button text from actual process state."""
-        if self.backup_process is not None and self.backup_process.poll() is not None:
-            self.backup_process = None
+        if not self.backup_runner.is_running() and self.btn_backup.cget("text") == "Stop Backup":
             self.btn_backup.config(text="Start Backup")
             self.status_label.config(text="Backup stopped.")
         if self.pic_review_process is not None and self.pic_review_process.poll() is not None:
@@ -117,40 +118,29 @@ class BackupMenuApp(tk.Tk):
             self.status_label.config(text="Pic Quality Review stopped.")
 
     def _toggle_backup(self):
-        if self.backup_process is not None and self.backup_process.poll() is None:
+        if self.backup_runner.is_running():
             self._stop_backup()
         else:
             self._start_backup()
 
     def _start_backup(self):
-        if self.backup_process is not None and self.backup_process.poll() is None:
+        if self.backup_runner.is_running():
             self.status_label.config(text="Backup already running.")
             return
-        try:
-            self.backup_process = subprocess.Popen(
-                [sys.executable, MAIN_PY],
-                cwd=SCRIPT_DIR,
-                start_new_session=True,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-            self.btn_backup.config(text="Stop Backup")
-            self.status_label.config(text="Backup running.")
-        except FileNotFoundError:
-            self.status_label.config(text="Error: main.py not found.")
-            messagebox.showerror("Error", f"Could not find:\n{MAIN_PY}")
-        except Exception as e:
+        result = self.backup_runner.start()
+        if result:
+            title, message = result
             self.status_label.config(text="Error starting backup.")
-            messagebox.showerror("Error", f"Failed to start backup:\n{e}")
+            messagebox.showerror(title, message)
+        else:
+            self.btn_backup.config(text="Stop Backup")
+            self.status_label.config(text="Backup running (see terminal for messages).")
 
     def _stop_backup(self):
-        if self.backup_process is None or self.backup_process.poll() is not None:
-            self.backup_process = None
+        if not self.backup_runner.is_running():
             self.btn_backup.config(text="Start Backup")
             return
-        _kill_process_and_children(self.backup_process)
-        self.backup_process = None
+        self.backup_runner.stop()
         self.btn_backup.config(text="Start Backup")
         self.status_label.config(text="Backup stopped.")
 
@@ -198,9 +188,8 @@ class BackupMenuApp(tk.Tk):
             self._poll_id = None
         self.status_label.config(text="Stopping all processes…")
         self.update_idletasks()
-        _kill_process_and_children(self.backup_process)
+        self.backup_runner.stop()
         _kill_process_and_children(self.pic_review_process)
-        self.backup_process = None
         self.pic_review_process = None
         self.quit()
         self.destroy()
