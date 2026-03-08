@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 from datetime import datetime, timezone
@@ -210,15 +211,20 @@ def load_existing_results(results_path: Path) -> dict[str, dict]:
 
 
 def save_results(results_path: Path, records: list[dict], root: Path) -> None:
-    """Write results JSON with metadata."""
+    """Write results JSON with metadata. Uses atomic write (temp + rename) to avoid corruption."""
     payload = {
         "directory": str(root.resolve()),
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "total_images": len(records),
         "results": records,
     }
-    with open(results_path, "w", encoding="utf-8") as f:
+    # Atomic write: write to temp then rename so a crash mid-write doesn't corrupt the file
+    tmp_path = results_path.with_suffix(results_path.suffix + ".tmp")
+    with open(tmp_path, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2, ensure_ascii=False)
+        f.flush()
+        os.fsync(f.fileno())
+    tmp_path.replace(results_path)
 
 
 def main() -> int:
@@ -265,8 +271,10 @@ def main() -> int:
     to_process = [p for p in all_jpegs if relative_path(p, root) not in existing]
     print(f"Found {len(all_jpegs)} JPEG(s); {len(to_process)} new to process.")
 
-    # Start from existing results, then add/update
+    # Start from existing results, then add/update; write after each new image
     results_by_path = dict(existing)
+    order = [relative_path(p, root) for p in all_jpegs]
+    ordered_records = [results_by_path[r] for r in order if r in results_by_path]
 
     for i, image_path in enumerate(to_process):
         rel = relative_path(image_path, root)
@@ -285,11 +293,12 @@ def main() -> int:
 
         results_by_path[rel] = rec
 
-    # Persist full list (order: existing keys order + new in scan order)
-    order = [relative_path(p, root) for p in all_jpegs]
-    ordered_records = [results_by_path[r] for r in order if r in results_by_path]
-    save_results(results_path, ordered_records, root)
-    print(f"Wrote {results_path} ({len(ordered_records)} images).")
+        # Write full results after each image so a stop (Ctrl+C, crash) doesn't lose progress
+        ordered_records = [results_by_path[r] for r in order if r in results_by_path]
+        save_results(results_path, ordered_records, root)
+        print(f"  -> saved ({len(ordered_records)} results)")
+
+    print(f"Done. {results_path} has {len(ordered_records)} images.")
     return 0
 
 
