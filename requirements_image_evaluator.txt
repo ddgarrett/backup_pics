@@ -1,0 +1,12 @@
+# Image Evaluator dependencies
+# Install: pip install -r requirements_image_evaluator.txt
+
+Pillow>=9.0.0
+numpy>=1.20.0
+torch>=1.10.0
+piq>=0.8.0
+tensorflow>=2.10.0
+tensorflow_hub>=0.12.0
+
+# Optional: use TFLite instead of full TensorFlow for MUSIQ
+# tflite-runtime>=2.10.0
