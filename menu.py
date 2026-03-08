@@ -107,6 +107,12 @@ class BackupMenuApp(tk.Tk):
         self._update_labels_from_processes()
         self._poll_id = self.after(1000, self._start_poll)
 
+    def _bring_to_front(self):
+        """Raise the menu window to the top so it is not covered by newly opened windows."""
+        self.lift()
+        self.attributes("-topmost", True)
+        self.after(100, lambda: self.attributes("-topmost", False))
+
     def _update_labels_from_processes(self):
         """Refresh Backup and Pic Review button text from actual process state."""
         if not self.backup_runner.is_running() and self.btn_backup.cget("text") == "Stop Backup":
@@ -135,6 +141,7 @@ class BackupMenuApp(tk.Tk):
         else:
             self.btn_backup.config(text="Stop Backup")
             self.status_label.config(text="Backup running (see terminal for messages).")
+            self._bring_to_front()
 
     def _stop_backup(self):
         if not self.backup_runner.is_running():
