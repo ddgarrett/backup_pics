@@ -129,8 +129,8 @@ def evaluate_musiq_tf(image_path: Path) -> dict:
         with open(image_path, "rb") as f:
             image_bytes = f.read()
         predict_fn = _load_musiq_tf()
-        # Model expects image bytes (batch of scalars or single tensor)
-        inp = tf.constant([image_bytes])
+        # DecodeJpeg expects a scalar (single image bytes), not a batch
+        inp = tf.constant(image_bytes)
         out = predict_fn(inp)
         # Output may be dict with key like 'output_0' or 'predictions'
         if isinstance(out, dict):
