@@ -108,10 +108,23 @@ class BackupMenuApp(tk.Tk):
         self._poll_id = self.after(1000, self._start_poll)
 
     def _bring_to_front(self):
-        """Raise the menu window to the top so it is not covered by newly opened windows."""
-        self.lift()
+        """Raise the menu window to the top so it is not covered by newly opened windows (Raspberry Pi / LXDE).
+        If Tk's raise fails, wmctrl is used when available (install with: sudo apt install wmctrl)."""
+        self.deiconify()
         self.attributes("-topmost", True)
-        self.after(100, lambda: self.attributes("-topmost", False))
+        self.update_idletasks()
+        self.attributes("-topmost", False)
+        self.lift()
+        self.focus_force()
+        # Try wmctrl if available (often works when Tk alone does not on Pi)
+        try:
+            subprocess.run(
+                ["wmctrl", "-a", "Backup Pics"],
+                capture_output=True,
+                timeout=1,
+            )
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
 
     def _update_labels_from_processes(self):
         """Refresh Backup and Pic Review button text from actual process state."""
@@ -141,7 +154,8 @@ class BackupMenuApp(tk.Tk):
         else:
             self.btn_backup.config(text="Stop Backup")
             self.status_label.config(text="Backup running (see terminal for messages).")
-            self._bring_to_front()
+            # Delay so the terminal window opens first, then raise menu on top (Raspberry Pi / LXDE)
+            self.after(500, self._bring_to_front)
 
     def _stop_backup(self):
         if not self.backup_runner.is_running():
