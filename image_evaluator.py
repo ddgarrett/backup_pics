@@ -14,6 +14,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import os
 import sys
@@ -101,21 +102,51 @@ def relative_path(path: Path, root: Path) -> str:
     return path.relative_to(root).as_posix()
 
 
-def load_image_as_tensor(path: Path, device: torch.device) -> torch.Tensor:
-    """Load JPEG as tensor (1, 3, H, W), range [0, 1], RGB."""
+def _resize_image(img: Image.Image, max_size: int) -> Image.Image:
+    """Resize so longest side is at most max_size, keeping aspect ratio."""
+    w, h = img.size
+    if max(w, h) <= max_size:
+        return img
+    if w >= h:
+        new_w, new_h = max_size, int(round(h * max_size / w))
+    else:
+        new_w, new_h = int(round(w * max_size / h)), max_size
+    return img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+
+
+def load_image_as_tensor(path: Path, device: torch.device, max_size: int | None = None) -> torch.Tensor:
+    """Load JPEG as tensor (1, 3, H, W), range [0, 1], RGB. Optionally resize for speed."""
     img = Image.open(path).convert("RGB")
+    if max_size is not None:
+        img = _resize_image(img, max_size)
     arr = torch.from_numpy(np.array(img)).float() / 255.0
     # (H, W, C) -> (1, C, H, W)
     tensor = arr.permute(2, 0, 1).unsqueeze(0).to(device)
     return tensor
 
 
-def evaluate_clip_iqa(image_path: Path, device: torch.device) -> dict:
-    """Run CLIP-IQA on one image. Returns dict with score and optional error."""
+def _image_to_jpeg_bytes(path: Path, max_size: int | None = None, quality: int = 85) -> bytes:
+    """Load image, optionally resize, return as JPEG bytes (for MUSIQ)."""
+    img = Image.open(path).convert("RGB")
+    if max_size is not None:
+        img = _resize_image(img, max_size)
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=quality, optimize=False)
+    return buf.getvalue()
+
+
+def evaluate_clip_iqa(
+    image_path: Path,
+    device: torch.device,
+    metric: piq.CLIPIQA | None = None,
+    max_size: int | None = None,
+) -> dict:
+    """Run CLIP-IQA on one image. Reuse metric if provided (much faster)."""
     try:
-        x = load_image_as_tensor(image_path, device)
-        metric = piq.CLIPIQA(data_range=1.0).to(device)
-        with torch.no_grad():
+        x = load_image_as_tensor(image_path, device, max_size=max_size)
+        if metric is None:
+            metric = piq.CLIPIQA(data_range=1.0).to(device)
+        with torch.inference_mode():
             score = metric(x)
         value = float(score.squeeze().cpu().numpy())
         return {"clip_iqa_score": round(value, 6), "clip_iqa_error": None}
@@ -123,12 +154,11 @@ def evaluate_clip_iqa(image_path: Path, device: torch.device) -> dict:
         return {"clip_iqa_score": None, "clip_iqa_error": str(e)}
 
 
-def evaluate_musiq_tf(image_path: Path) -> dict:
-    """Run MUSIQ via TensorFlow Hub on one image (raw bytes). Returns dict with score 1–10."""
+def evaluate_musiq_tf(image_path: Path, max_size: int | None = None) -> dict:
+    """Run MUSIQ via TensorFlow Hub on one image (raw bytes). Optionally resize for speed."""
     import tensorflow as tf
     try:
-        with open(image_path, "rb") as f:
-            image_bytes = f.read()
+        image_bytes = _image_to_jpeg_bytes(image_path, max_size=max_size)
         predict_fn = _load_musiq_tf()
         # DecodeJpeg expects a scalar (single image bytes), not a batch
         inp = tf.constant(image_bytes)
@@ -144,20 +174,19 @@ def evaluate_musiq_tf(image_path: Path) -> dict:
         return {"musiq_score": None, "musiq_error": str(e)}
 
 
-def evaluate_musiq_tflite(image_path: Path, tflite_path: str) -> dict:
-    """Run MUSIQ via TFLite. Expects input shape compatible with image bytes or decoded image."""
+def evaluate_musiq_tflite(image_path: Path, tflite_path: str, max_size: int | None = None) -> dict:
+    """Run MUSIQ via TFLite. Optionally resize for speed."""
     try:
         interp, input_details, output_details = _load_musiq_tflite(tflite_path)
-        with open(image_path, "rb") as f:
-            image_bytes = f.read()
+        image_bytes = _image_to_jpeg_bytes(image_path, max_size=max_size)
         # Typical Hub->TFLite: input is string (bytes). Shape often (1,) or () for one image.
         inp = input_details[0]
         if inp["dtype"] == np.uint8 or "string" in str(inp["dtype"]).lower():
             # Pass raw bytes; interpreter may expect numpy array of bytes/object
             data = np.array([image_bytes], dtype=object) if inp["shape"] != [] else np.array(image_bytes, dtype=object)
         else:
-            # Decode image and resize to model input size if needed
-            img = Image.open(image_path).convert("RGB")
+            # Decode image (already resized via image_bytes if max_size used)
+            img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
             arr = np.array(img, dtype=np.float32)
             if len(inp["shape"]) == 4:
                 # NCHW or NHWC
@@ -256,6 +285,13 @@ def main() -> int:
         choices=("cpu", "cuda", "mps"),
         help="Device for CLIP-IQA (PyTorch)",
     )
+    parser.add_argument(
+        "--max-size",
+        type=int,
+        default=512,
+        metavar="N",
+        help="Resize to max side N px before evaluation (default: 512). Use 0 for full resolution (slow).",
+    )
     args = parser.parse_args()
 
     root = args.directory.resolve()
@@ -266,10 +302,17 @@ def main() -> int:
     results_path = (args.output or root / DEFAULT_RESULTS_BASENAME).resolve()
     existing = load_existing_results(results_path)
     device = torch.device(args.device)
+    max_size = getattr(args, "max_size", None)  # None = no resize (full res), or e.g. 512
 
     all_jpegs = find_jpeg_files(root)
     to_process = [p for p in all_jpegs if relative_path(p, root) not in existing]
     print(f"Found {len(all_jpegs)} JPEG(s); {len(to_process)} new to process.")
+    if max_size is not None:
+        print(f"Resizing to max side {max_size} px for evaluation (use --max-size 0 to disable).")
+
+    # Create CLIP-IQA metric once and reuse (avoids loading model per image)
+    clip_metric = piq.CLIPIQA(data_range=1.0).to(device)
+    eval_max_size = max_size if max_size and max_size > 0 else None
 
     # Start from existing results, then add/update; write after each new image
     results_by_path = dict(existing)
@@ -282,13 +325,13 @@ def main() -> int:
         rec = collect_file_info(image_path, root)
         rec["evaluated_at"] = datetime.now(timezone.utc).isoformat()
 
-        clip_out = evaluate_clip_iqa(image_path, device)
+        clip_out = evaluate_clip_iqa(image_path, device, metric=clip_metric, max_size=eval_max_size)
         rec.update(clip_out)
 
         if args.musiq_tflite:
-            musiq_out = evaluate_musiq_tflite(image_path, args.musiq_tflite)
+            musiq_out = evaluate_musiq_tflite(image_path, args.musiq_tflite, max_size=eval_max_size)
         else:
-            musiq_out = evaluate_musiq_tf(image_path)
+            musiq_out = evaluate_musiq_tf(image_path, max_size=eval_max_size)
         rec.update(musiq_out)
 
         results_by_path[rel] = rec
