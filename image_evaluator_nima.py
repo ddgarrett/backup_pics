@@ -79,37 +79,47 @@ def collect_file_info(image_path: Path, root: Path) -> dict:
 def evaluate_nima(image_path: Path, nima_metric, device: str) -> dict:
     """
     Run NIMA on one image. Returns dict with nima_score, nima_details, nima_error.
-    pyiqa NIMA may return a tensor (mean score) or multiple values; we capture all.
+    Uses pyiqa, which returns a PyTorch tensor (scalar or small vector).
     """
     try:
         # pyiqa accepts image path (str or Path)
         out = nima_metric(str(image_path))
-        if hasattr(out, "cpu"):
-            out = out.cpu()
-        if hasattr(out, "numpy"):
-            arr = out.numpy()
-        elif hasattr(out, "item"):
-            arr = float(out.item())
-        else:
-            arr = float(out) if isinstance(out, (int, float)) else str(out)
 
-        # Normalize to serializable form (handle numpy scalars and arrays)
-        if hasattr(arr, "tolist"):
-            arr = arr.tolist()
-        elif isinstance(arr, (np.floating, np.integer)):
-            arr = float(arr) if isinstance(arr, np.floating) else int(arr)
-        if isinstance(arr, list):
-            mean_score = float(arr[0]) if len(arr) > 0 else None
-            std_score = float(arr[1]) if len(arr) > 1 else None
-            details = {"mean": mean_score, "std": std_score, "raw": arr}
-        elif isinstance(arr, (int, float)):
-            details = {"mean": float(arr), "raw": arr}
+        # Convert whatever we got to a PyTorch tensor on CPU
+        if isinstance(out, (int, float)):
+            score = float(out)
+            details = {"mean": score, "raw": score}
         else:
-            details = {"raw": arr}
+            # Tensor, numpy array, or list -> tensor
+            if hasattr(out, "detach"):
+                t = out.detach().cpu()
+            else:
+                t = torch.as_tensor(out)
+            t = t.float().cpu()
 
-        score = details.get("mean") if isinstance(details, dict) else None
-        if score is None and isinstance(arr, (int, float)):
-            score = float(arr)
+            if t.ndim == 0:
+                score = float(t.item())
+                details = {"mean": score, "raw": float(t.item())}
+            else:
+                flat = t.view(-1)
+                # If we have exactly 10 values, treat as NIMA distribution over scores 1..10
+                if flat.numel() == 10:
+                    probs = flat / (flat.sum() + 1e-8)
+                    ratings = torch.arange(1, 11, dtype=probs.dtype)
+                    score = float((probs * ratings).sum().item())
+                    details = {
+                        "mean": score,
+                        "probs": probs.tolist(),
+                        "raw": flat.tolist(),
+                    }
+                else:
+                    # Fallback: average all values
+                    score = float(flat.mean().item())
+                    details = {
+                        "mean": score,
+                        "raw": flat.tolist(),
+                    }
+
         return {
             "nima_score": round(score, 6) if score is not None else None,
             "nima_details": details,
