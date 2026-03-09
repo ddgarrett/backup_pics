@@ -273,7 +273,7 @@ def main() -> int:
         ordered_records = [results_by_path[r] for r in order if r in results_by_path]
 
         save_results(results_path, ordered_records, root)
-        print(f"  -> NIMA: {rec.get('nima_score')}, {elapsed:.2f}s — saved ({len(ordered_records)} results)")
+        print(f"  -> NIMA: {rec.get('nima_score')}, {elapsed:.2f}s - saved ({len(ordered_records)} results)")
 
     # If nothing was processed this run, refresh JSON once with current stats and total run time from all records
     if not to_process and ordered_records:
