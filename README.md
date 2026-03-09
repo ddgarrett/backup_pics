@@ -41,5 +41,6 @@ backed up to RPi5 or backed up to a given external backup drive.
     * test speed
     * may eventually use a combination, with fast initial review followed by more detailed review
     * see [Claude AI Comparison](https://claude.ai/share/c3d85d17-36ee-4b79-a74b-419d551396dc)
-    * to run use: `
+    * to run use: `python image_evaluator_nima.py /home/dgarrett/Documents/pictures/MEDIA_BACKUP/yyyy-mm-dd_backup`
+    
 
