@@ -1,16 +1,12 @@
-# backup_pics
-Automatically backup pictures.
+# Backup Pics
+Automatically backup pictures. [config.json](config.json) defines image sources and secondary backup drives.
+Workflow is to attach a phone or camera SD card. Any new pictures will be copied to a backup directory 
+on the Raspberry Pi 5 SSD. Secondary backup drives can then be attached to the Raspberry Pi
+and new pictures will be copied to those drives.
 
 Created for Raspberry Pi 5 (RPi5) with 2 TB SSD.
 
-Program automatically starts when RPi5 is booted.
-
-When a known photo/video source, such as a cell phone or sd card,
-is mounted via USB, copy images/videos from specified
-folder(s) into a backup folder.
-
-When a known external backup drive is attached to the RPi5, copy any new 
-files from the backup folder on RPi5 to the external backup drive.
+Backup program automatically starts when RPi5 is booted.
 
 Multiple external backup drives can be used, such as a travel SSD 
 and a home based magnetic hard drive.
@@ -20,10 +16,10 @@ backed up to RPi5 or backed up to a given external backup drive.
 
 ---
 
-* Above is run from `main.py`
+* Autostart backup currently runs `main.py`
 
-* Adding Menu to allow start/stop 2 processes: backup and quality eval 
-    * `cursor` prompts in [v001.000.001 notes](notes/v001.000.001%20add%20menu%20for%20backup%20and%20pic%20review.md)
+* In process: adding menu to allow start/stop processes for backup and image quality evaluation
+    * `cursor` prompts defining menu in [v001.000.001 notes](notes/v001.000.001%20add%20menu%20for%20backup%20and%20pic%20review.md)
     * `menu.py` displays menu and starts backup process defined in `backup_process.py`
     * `backup_process.py` - starts/stops `main.py`
     * `pic_quality_review.py` - currently placeholder for quality review
