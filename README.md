@@ -23,14 +23,14 @@ backed up to RPi5 or backed up to a given external backup drive.
 * Above is run from `main.py`
 
 * Adding Menu to allow start/stop 2 processes: backup and quality eval 
-    * `cursor` prompts in [notes](notes/v001.000.001%20add%20menu%20for%20backup%20and%20pic%20review.md)
+    * `cursor` prompts in [v001.000.001 notes](notes/v001.000.001%20add%20menu%20for%20backup%20and%20pic%20review.md)
     * `menu.py` displays menu and starts backup process defined in `backup_process.py`
     * `backup_process.py` - starts/stops `main.py`
     * `pic_quality_review.py` - currently placeholder for quality review
     
 
 * Image eval testing version 1 uses **CLIP-IQA** and **MUSIQ**
-    * `cursor` prompts in [notes](notes/v001.000.002_cursor_image_evaluation.md)
+    * `cursor` prompts in [v001.000.002 notes](notes/v001.000.002_cursor_image_evaluation.md)
     * description of install and running is in `IMAGE_EVALUATOR_README.md`
     * pip install details in `requirements_image_evaluator.txt`
     * `image_evaluator.py` is the image evaluator python program 
