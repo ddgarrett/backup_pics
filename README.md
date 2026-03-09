@@ -23,7 +23,7 @@ backed up to RPi5 or backed up to a given external backup drive.
 * Above is run from `main.py`
 
 * Adding Menu to allow start/stop 2 processes: backup and quality eval 
-    * `cursor` prompts in [notes](notes/v001.000.001 add menu for backup and pic review.md)
+    * `cursor` prompts in [notes](notes/v001.000.001%20add%20menu%20for%20backup%20and%20pic%20review.md)
     * `menu.py` displays menu and starts backup process defined in `backup_process.py`
     * `backup_process.py` - starts/stops `main.py`
     * `pic_quality_review.py` - currently placeholder for quality review
