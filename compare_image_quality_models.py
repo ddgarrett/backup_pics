@@ -22,7 +22,9 @@ corresponding evaluator scripts to generate them, then perform the comparison.
 from __future__ import annotations
 
 import argparse
+import csv
 import json
+import shutil
 import statistics
 import subprocess
 import sys
@@ -31,6 +33,14 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
+
+# Number of top/bottom images to show and to copy into comparison folders
+TOP_BOTTOM_K = 10
+
+# Weights for calculated score: 40% NIMA, 20% CLIP-IQA, 40% MUSIQ
+WEIGHT_NIMA = 0.40
+WEIGHT_CLIP_IQA = 0.20
+WEIGHT_MUSIQ = 0.40
 
 
 # Default image directory on the Raspberry Pi
@@ -46,6 +56,7 @@ class JoinedRecord:
     nima_score: Optional[float]
     clip_iqa_score: Optional[float]
     musiq_score: Optional[float]
+    calculated_score: Optional[float] = None
 
 
 def _load_results(path: Path) -> List[dict]:
@@ -90,6 +101,63 @@ def join_results(
             )
         )
     return joined
+
+
+def _normalize_min_max(values: List[float]) -> Tuple[float, float]:
+    """Return (min, max) for min-max normalization. If all same, return (0, 1) to avoid div by zero."""
+    if not values:
+        return 0.0, 1.0
+    lo, hi = min(values), max(values)
+    if lo == hi:
+        return 0.0, 1.0
+    return lo, hi
+
+
+def compute_calculated_scores(joined: List[JoinedRecord]) -> None:
+    """
+    Compute weighted average score (40% NIMA, 20% CLIP-IQA, 40% MUSIQ) for each record.
+    Scores are normalized to 0-1 per model so scales are comparable. If a score is missing,
+    weights are renormalized over the present scores. Mutates joined in place.
+    """
+    nima_vals = [r.nima_score for r in joined if r.nima_score is not None]
+    clip_vals = [r.clip_iqa_score for r in joined if r.clip_iqa_score is not None]
+    musiq_vals = [r.musiq_score for r in joined if r.musiq_score is not None]
+
+    nima_lo, nima_hi = _normalize_min_max(nima_vals)
+    clip_lo, clip_hi = _normalize_min_max(clip_vals)
+    musiq_lo, musiq_hi = _normalize_min_max(musiq_vals)
+
+    def norm_nima(x: float) -> float:
+        if nima_hi == nima_lo:
+            return 0.0
+        return (x - nima_lo) / (nima_hi - nima_lo)
+
+    def norm_clip(x: float) -> float:
+        if clip_hi == clip_lo:
+            return 0.0
+        return (x - clip_lo) / (clip_hi - clip_lo)
+
+    def norm_musiq(x: float) -> float:
+        if musiq_hi == musiq_lo:
+            return 0.0
+        return (x - musiq_lo) / (musiq_hi - musiq_lo)
+
+    for r in joined:
+        w_n = WEIGHT_NIMA if r.nima_score is not None else 0.0
+        w_c = WEIGHT_CLIP_IQA if r.clip_iqa_score is not None else 0.0
+        w_m = WEIGHT_MUSIQ if r.musiq_score is not None else 0.0
+        total_w = w_n + w_c + w_m
+        if total_w == 0:
+            r.calculated_score = None
+            continue
+        score = 0.0
+        if r.nima_score is not None:
+            score += (w_n / total_w) * norm_nima(r.nima_score)
+        if r.clip_iqa_score is not None:
+            score += (w_c / total_w) * norm_clip(r.clip_iqa_score)
+        if r.musiq_score is not None:
+            score += (w_m / total_w) * norm_musiq(r.musiq_score)
+        r.calculated_score = round(score, 6)
 
 
 def _safe_float(v) -> Optional[float]:
@@ -243,6 +311,85 @@ def print_cross_model_scores_for_top(
         print(f"{i:2d}. {ns:10s}  {cs:9s}  {ms:9s}  {rel}")
 
 
+def _safe_copy_filename(relative_path: str) -> str:
+    """Convert relative_path to a safe single filename (e.g. for copying into a flat folder)."""
+    return relative_path.replace("/", "_").replace("\\", "_")
+
+
+def write_collect_score_csv(image_root: Path, joined: List[JoinedRecord]) -> Path:
+    """Write collect_score.csv in image_root. Returns path to the file."""
+    csv_path = image_root / "collect_score.csv"
+    with open(csv_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(
+            ["image_file_name", "nima_score", "clip_iqa_score", "musiq_score", "calculated_score"]
+        )
+        for r in joined:
+            writer.writerow([
+                r.relative_path,
+                "" if r.nima_score is None else f"{r.nima_score:.6f}",
+                "" if r.clip_iqa_score is None else f"{r.clip_iqa_score:.6f}",
+                "" if r.musiq_score is None else f"{r.musiq_score:.6f}",
+                "" if r.calculated_score is None else f"{r.calculated_score:.6f}",
+            ])
+    print(f"Wrote {csv_path}")
+    return csv_path
+
+
+COMPARISON_SUBFOLDERS = [
+    "top_nima",
+    "bottom_nima",
+    "top_clip-iqa",
+    "bottom_clip-iqa",
+    "top_musiq",
+    "bottom_musiq",
+    "top_calculated",
+    "bottom_calculated",
+]
+
+
+def create_comparison_folders_and_copy(
+    image_root: Path,
+    nima_top: List[str],
+    nima_bottom: List[str],
+    clip_top: List[str],
+    clip_bottom: List[str],
+    musiq_top: List[str],
+    musiq_bottom: List[str],
+    calculated_top: List[str],
+    calculated_bottom: List[str],
+) -> None:
+    """
+    Create comparison/ and the 8 subfolders, then copy the top/bottom 10 images
+    from the image directory into each subfolder (using safe filenames).
+    """
+    comparison_dir = image_root / "comparison"
+    comparison_dir.mkdir(parents=True, exist_ok=True)
+    for name in COMPARISON_SUBFOLDERS:
+        (comparison_dir / name).mkdir(parents=True, exist_ok=True)
+
+    def copy_paths_into_subfolder(subfolder: str, paths: List[str]) -> None:
+        dest_dir = comparison_dir / subfolder
+        for rel in paths:
+            src = image_root / rel
+            if not src.exists():
+                print(f"  (skip missing: {rel})")
+                continue
+            dest_name = _safe_copy_filename(rel)
+            dest = dest_dir / dest_name
+            shutil.copy2(src, dest)
+
+    copy_paths_into_subfolder("top_nima", nima_top)
+    copy_paths_into_subfolder("bottom_nima", nima_bottom)
+    copy_paths_into_subfolder("top_clip-iqa", clip_top)
+    copy_paths_into_subfolder("bottom_clip-iqa", clip_bottom)
+    copy_paths_into_subfolder("top_musiq", musiq_top)
+    copy_paths_into_subfolder("bottom_musiq", musiq_bottom)
+    copy_paths_into_subfolder("top_calculated", calculated_top)
+    copy_paths_into_subfolder("bottom_calculated", calculated_bottom)
+    print(f"Created {comparison_dir} with 8 subfolders and copied top/bottom {TOP_BOTTOM_K} images.")
+
+
 def run_command(cmd: List[str], cwd: Path) -> None:
     print(f"\nRunning command: {' '.join(cmd)}")
     try:
@@ -349,6 +496,8 @@ def main() -> int:
         print("No overlapping images found between NIMA and CLIP/MUSIQ results (by relative_path).")
         return 1
 
+    compute_calculated_scores(joined)
+
     print(f"\nTotal images in NIMA results       : {len(nima_records)}")
     print(f"Total images in CLIP/MUSIQ results : {len(cm_records)}")
     print(f"Images present in both (analyzed)  : {len(joined)}")
@@ -357,17 +506,34 @@ def main() -> int:
     nima_scores = extract_scores(joined, "nima_score")
     clip_scores = extract_scores(joined, "clip_iqa_score")
     musiq_scores = extract_scores(joined, "musiq_score")
+    calculated_scores = extract_scores(joined, "calculated_score")
 
     # Distribution stats
     print_stats("NIMA", nima_scores)
     print_stats("CLIP-IQA", clip_scores)
     print_stats("MUSIQ", musiq_scores)
+    print_stats("Calculated (40% NIMA, 20% CLIP-IQA, 40% MUSIQ)", calculated_scores)
 
-    # Top and bottom images per model
-    top_k = 5
+    # Top and bottom images per model (10 each)
+    top_k = TOP_BOTTOM_K
     nima_top, nima_bottom = print_top_bottom("NIMA", nima_scores, top_k)
     clip_top, clip_bottom = print_top_bottom("CLIP-IQA", clip_scores, top_k)
     musiq_top, musiq_bottom = print_top_bottom("MUSIQ", musiq_scores, top_k)
+    calculated_top, calculated_bottom = print_top_bottom("Calculated", calculated_scores, top_k)
+
+    # CSV and comparison folders in the image directory (where .json files are)
+    write_collect_score_csv(image_root, joined)
+    create_comparison_folders_and_copy(
+        image_root,
+        nima_top,
+        nima_bottom,
+        clip_top,
+        clip_bottom,
+        musiq_top,
+        musiq_bottom,
+        calculated_top,
+        calculated_bottom,
+    )
 
     # Correlations
     print_model_correlations(joined)
