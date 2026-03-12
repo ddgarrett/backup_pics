@@ -336,6 +336,62 @@ def write_collect_score_csv(image_root: Path, joined: List[JoinedRecord]) -> Pat
     return csv_path
 
 
+def join_with_image_collection_csv(image_root: Path, collect_score_path: Path) -> None:
+    """
+    If image_collection.csv exists in image_root, join it with collect_score.csv
+    on file_name (image_collection) == image_file_name (collect_score) and write
+    a new CSV containing all image_collection fields followed by collect_score fields.
+    """
+    collection_path = image_root / "image_collection.csv"
+    if not collection_path.exists():
+        return
+
+    print(f"Found {collection_path}, joining with {collect_score_path} ...")
+
+    # Read collect_score.csv into a dict keyed by image_file_name
+    with open(collect_score_path, "r", encoding="utf-8") as f_scores:
+        score_reader = csv.DictReader(f_scores)
+        score_rows_by_name = {row.get("image_file_name"): row for row in score_reader}
+
+    if not score_rows_by_name:
+        print("collect_score.csv is empty; skipping join.")
+        return
+
+    # Read image_collection.csv and join
+    with open(collection_path, "r", encoding="utf-8") as f_coll:
+        coll_reader = csv.DictReader(f_coll)
+        coll_fieldnames = coll_reader.fieldnames or []
+
+        # Collect_score fieldnames (excluding image_file_name to avoid duplicate header)
+        score_fieldnames: list[str] = []
+        if score_rows_by_name:
+            sample_row = next(iter(score_rows_by_name.values()))
+            score_fieldnames = [fn for fn in sample_row.keys() if fn != "image_file_name"]
+
+        out_fieldnames = coll_fieldnames + score_fieldnames
+
+        out_path = image_root / "image_collection_with_scores.csv"
+        with open(out_path, "w", newline="", encoding="utf-8") as f_out:
+            writer = csv.DictWriter(f_out, fieldnames=out_fieldnames)
+            writer.writeheader()
+
+            join_count = 0
+            for coll_row in coll_reader:
+                file_name = coll_row.get("file_name")
+                score_row = score_rows_by_name.get(file_name)
+                if score_row is None:
+                    # If no scores for this file, just write collection fields
+                    writer.writerow(coll_row)
+                    continue
+                join_count += 1
+                combined = dict(coll_row)
+                for fn in score_fieldnames:
+                    combined[fn] = score_row.get(fn, "")
+                writer.writerow(combined)
+
+        print(f"Wrote joined CSV {out_path} with {join_count} matched rows.")
+
+
 COMPARISON_SUBFOLDERS = [
     "top_nima",
     "bottom_nima",
@@ -522,7 +578,8 @@ def main() -> int:
     calculated_top, calculated_bottom = print_top_bottom("Calculated", calculated_scores, top_k)
 
     # CSV and comparison folders in the image directory (where .json files are)
-    write_collect_score_csv(image_root, joined)
+    collect_score_path = write_collect_score_csv(image_root, joined)
+    join_with_image_collection_csv(image_root, collect_score_path)
     create_comparison_folders_and_copy(
         image_root,
         nima_top,
