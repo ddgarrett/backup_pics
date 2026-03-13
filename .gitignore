@@ -210,3 +210,7 @@ musiq_saved_model/fingerprint.pb
 musiq_saved_model/saved_model.pb
 musiq_saved_model/variables/variables.data-00000-of-00001
 musiq_saved_model/variables/variables.index
+musiq_saved_model_v01/fingerprint.pb
+musiq_saved_model_v01/saved_model.pb
+musiq_saved_model_v01/variables/variables.data-00000-of-00001
+musiq_saved_model_v01/variables/variables.index
