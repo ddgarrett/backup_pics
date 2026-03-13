@@ -9,10 +9,11 @@ Run from the backup_pics project directory.
 Usage (on the Pi):
   python convert_musiq_to_tflite.py ./musiq_saved_model --output musiq_ava.tflite
 
-To obtain the SavedModel on the Pi:
+To obtain the SavedModel on the Pi (use tf.saved_model.save, not model.save):
+  import tensorflow as tf
   import tensorflow_hub as hub
   model = hub.load("https://tfhub.dev/google/musiq/ava/1")
-  model.save("./musiq_saved_model")
+  tf.saved_model.save(model, "./musiq_saved_model")
 """
 
 from __future__ import annotations
