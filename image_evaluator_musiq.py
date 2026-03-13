@@ -2,11 +2,10 @@
 """
 Image Evaluator (MUSIQ only) — evaluate images (e.g. 4080×3071 JPEGs) with MUSIQ.
 
-Takes a directory path, walks main and subdirectories for JPEGs, and saves
-CSV results. Supports evaluating at multiple resize max-sizes in a single run;
-for each max-size value, separate CSV files are written (depending on backend)
-whose names are suffixed with the backend and max-size
-e.g. image_evaluation_musiq_results_tf_512.csv.
+Takes a directory path, walks main and subdirectories for JPEGs, and saves CSV
+results. Supports evaluating at multiple resize max-sizes in a single run; for
+each max-size value, a separate CSV file is written whose name is suffixed
+with the max-size (e.g. image_evaluation_musiq_results_512.csv).
 
 Usage examples:
 
@@ -16,34 +15,8 @@ Usage examples:
   # Evaluate at multiple sizes (e.g. 256, 512, full-res)
   python image_evaluator_musiq.py /path/to/images --max-size 256 512 0
 
-  # Use TFLite MUSIQ instead of full TensorFlow
-  python image_evaluator_musiq.py /path/to/images --backend tflite --tflite-model /path/to/musiq.tflite
-
-  # Run both backends (TF + TFLite) for side-by-side timing comparison
-  python image_evaluator_musiq.py /path/to/images --backend both --tflite-model /path/to/musiq.tflite
-
   # Custom output prefix
   python image_evaluator_musiq.py /path/to/images --output-prefix my_musiq_results
-
-TFLite model notes:
-- The official MUSIQ model is published as a TensorFlow SavedModel on TF Hub
-  (AVA variant, 1–10 aesthetic scores).
-- To use TFLite, first download/clone the SavedModel (from TF Hub or Kaggle
-  tfhub-redirect for musiq/ava) and run a small conversion script like:
-
-  ```python
-  import tensorflow as tf
-
-  saved_model_dir = "/path/to/downloaded/musiq_ava_saved_model"
-  converter = tf.lite.TFLiteConverter.from_saved_model(saved_model_dir)
-  # Optional: enable optimizations (may change numeric behavior slightly)
-  converter.optimizations = [tf.lite.Optimize.DEFAULT]
-  tflite_model = converter.convert()
-  with open("musiq_ava.tflite", "wb") as f:
-      f.write(tflite_model)
-  ```
-
-  Then point --tflite-model at the resulting musiq_ava.tflite file.
 """
 
 from __future__ import annotations
@@ -84,7 +57,6 @@ DEFAULT_RESULTS_PREFIX = "image_evaluation_musiq_results"
 JPEG_EXTENSIONS = {".jpg", ".jpeg", ".JPG", ".JPEG"}
 
 _MUSIQ_TF = None
-_MUSIQ_TFLITE = None
 
 
 def _load_musiq_tf():
@@ -96,38 +68,6 @@ def _load_musiq_tf():
     model = hub.load("https://tfhub.dev/google/musiq/ava/1")
     _MUSIQ_TF = model.signatures["serving_default"]
     return _MUSIQ_TF
-
-
-def _load_musiq_tflite(tflite_path: Path):
-    """
-    Load MUSIQ TFLite model. Returns (interpreter, input_details, output_details).
-    Assumes a single input (JPEG bytes as string/uint8) and single scalar output.
-    """
-    global _MUSIQ_TFLITE
-    key = str(tflite_path.resolve())
-    if _MUSIQ_TFLITE is not None and _MUSIQ_TFLITE[0] == key:
-        return _MUSIQ_TFLITE[1]
-
-    try:
-        # Try full TF Lite first
-        import tensorflow.lite as tflite  # type: ignore[import]
-    except ImportError:
-        try:
-            import tflite_runtime.interpreter as tflite  # type: ignore[import]
-        except ImportError:
-            print(
-                "Install TensorFlow (pip install tensorflow) or tflite_runtime "
-                "for TFLite MUSIQ support.",
-                file=sys.stderr,
-            )
-            raise
-
-    interp = tflite.Interpreter(model_path=str(tflite_path))
-    interp.allocate_tensors()
-    input_details = interp.get_input_details()
-    output_details = interp.get_output_details()
-    _MUSIQ_TFLITE = (key, (interp, input_details, output_details))
-    return _MUSIQ_TFLITE[1]
 
 
 def _resize_image(img: Image.Image, max_size: int) -> Image.Image:
@@ -165,32 +105,6 @@ def evaluate_musiq_tf(image_path: Path, max_size: Optional[int] = None) -> dict:
         else:
             v = out
         score = float(tf.squeeze(v).numpy())
-        return {"musiq_score": round(score, 4), "musiq_error": None}
-    except Exception as e:  # noqa: BLE001
-        return {"musiq_score": None, "musiq_error": str(e)}
-
-
-def evaluate_musiq_tflite(
-    image_path: Path,
-    tflite_path: Path,
-    max_size: Optional[int] = None,
-) -> dict:
-    """Run MUSIQ via TFLite on one image (raw bytes)."""
-    try:
-        interp, input_details, output_details = _load_musiq_tflite(tflite_path)
-        image_bytes = _image_to_jpeg_bytes(image_path, max_size=max_size)
-
-        inp = input_details[0]
-        # Most exported MUSIQ TFLite models accept a string/bytes input.
-        if "string" in str(inp["dtype"]).lower():
-            data = np.array([image_bytes], dtype=object)
-        else:
-            # Fallback: pass bytes as uint8 array
-            data = np.frombuffer(image_bytes, dtype=np.uint8)[None, :]
-
-        interp.set_tensor(inp["index"], data)
-        interp.invoke()
-        score = float(interp.get_tensor(output_details[0]["index"]).squeeze())
         return {"musiq_score": round(score, 4), "musiq_error": None}
     except Exception as e:  # noqa: BLE001
         return {"musiq_score": None, "musiq_error": str(e)}
@@ -241,112 +155,85 @@ def run_musiq_for_sizes(
     images: Iterable[Path],
     max_sizes: List[int],
     output_prefix: str,
-    backend: str,
-    tflite_model: Optional[Path],
 ) -> None:
     """
-    Evaluate MUSIQ for each image at each requested max-size, writing one CSV per size
-    and backend. max_size == 0 means full resolution (no resize).
-
-    backend:
-      - "tf":     use TensorFlow Hub MUSIQ
-      - "tflite": use TFLite MUSIQ (requires --tflite-model)
-      - "both":   run both and write two CSVs per size (tf + tflite)
+    Evaluate MUSIQ for each image at each requested max-size, writing one CSV per size.
+    max_size == 0 means full resolution (no resize).
     """
     images = list(images)
     if not images:
         print("No JPEG images found; nothing to do.")
         return
 
-    if backend in {"tflite", "both"} and tflite_model is None:
-        raise ValueError("TFLite backend requested but --tflite-model was not provided.")
-
     for max_size in max_sizes:
         size_label = "full" if max_size == 0 else str(max_size)
+        csv_name = f"{output_prefix}_{size_label}.csv"
+        csv_path = root / csv_name
+        print(f"\nEvaluating MUSIQ at max-size={max_size} ({size_label})")
+        print(f"Writing results to {csv_path}")
 
-        def run_for_backend(tag: str) -> None:
-            csv_name = f"{output_prefix}_{tag}_{size_label}.csv"
-            csv_path = root / csv_name
-            print(f"\nEvaluating MUSIQ ({tag}) at max-size={max_size} ({size_label})")
-            print(f"Writing results to {csv_path}")
+        total_time = 0.0
+        count = 0
 
-            total_time = 0.0
-            count = 0
+        with open(csv_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(
+                [
+                    "relative_path",
+                    "file_size_bytes",
+                    "file_size_mb",
+                    "width",
+                    "height",
+                    "evaluated_at",
+                    "evaluation_time_seconds",
+                    "max_size",
+                    "musiq_score",
+                    "musiq_error",
+                ]
+            )
 
-            with open(csv_path, "w", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
+            for i, img_path in enumerate(images, start=1):
+                info = collect_file_info(img_path, root)
+                print(f"[{i}/{len(images)}] {info.relative_path}")
+
+                t0 = time.perf_counter()
+                musiq_out = evaluate_musiq_tf(
+                    img_path,
+                    max_size=max_size if max_size > 0 else None,
+                )
+                elapsed = time.perf_counter() - t0
+
+                total_time += elapsed
+                count += 1
+
+                evaluated_at = datetime.now(timezone.utc).isoformat()
                 writer.writerow(
                     [
-                        "relative_path",
-                        "file_size_bytes",
-                        "file_size_mb",
-                        "width",
-                        "height",
-                        "evaluated_at",
-                        "evaluation_time_seconds",
-                        "max_size",
-                        "backend",
-                        "musiq_score",
-                        "musiq_error",
+                        info.relative_path,
+                        info.file_size_bytes,
+                        f"{info.file_size_mb:.4f}",
+                        info.width if info.width is not None else "",
+                        info.height if info.height is not None else "",
+                        evaluated_at,
+                        f"{elapsed:.4f}",
+                        max_size,
+                        musiq_out["musiq_score"] if musiq_out["musiq_score"] is not None else "",
+                        musiq_out["musiq_error"] or "",
                     ]
                 )
 
-                for i, img_path in enumerate(images, start=1):
-                    info = collect_file_info(img_path, root)
-                    print(f"[{i}/{len(images)}] ({tag}) {info.relative_path}")
-
-                    t0 = time.perf_counter()
-                    if tag == "tf":
-                        musiq_out = evaluate_musiq_tf(
-                            img_path,
-                            max_size=max_size if max_size > 0 else None,
-                        )
-                    else:
-                        musiq_out = evaluate_musiq_tflite(
-                            img_path,
-                            tflite_model if tflite_model is not None else Path(""),
-                            max_size=max_size if max_size > 0 else None,
-                        )
-                    elapsed = time.perf_counter() - t0
-
-                    total_time += elapsed
-                    count += 1
-
-                    evaluated_at = datetime.now(timezone.utc).isoformat()
-                    writer.writerow(
-                        [
-                            info.relative_path,
-                            info.file_size_bytes,
-                            f"{info.file_size_mb:.4f}",
-                            info.width if info.width is not None else "",
-                            info.height if info.height is not None else "",
-                            evaluated_at,
-                            f"{elapsed:.4f}",
-                            max_size,
-                            tag,
-                            musiq_out["musiq_score"] if musiq_out["musiq_score"] is not None else "",
-                            musiq_out["musiq_error"] or "",
-                        ]
-                    )
-
-            avg_time = total_time / count if count > 0 else 0.0
-            print(
-                f"Done for backend={tag}, max-size={max_size}. "
-                f"{count} images, avg eval time: {avg_time:.4f}s. Results: {csv_path}"
-            )
-
-        if backend in {"tf", "both"}:
-            run_for_backend("tf")
-        if backend in {"tflite", "both"}:
-            run_for_backend("tflite")
+        avg_time = total_time / count if count > 0 else 0.0
+        print(
+            f"Done for max-size={max_size}. {count} images, "
+            f"avg eval time: {avg_time:.4f}s. Results: {csv_path}"
+        )
 
 
 def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Evaluate images with MUSIQ only (TensorFlow, TFLite, or both); "
-            "save CSV results for one or more resize max-size values "
-            "(separate CSV per size and backend)."
+            "Evaluate images with MUSIQ only (TensorFlow); save CSV results for one "
+            "or more resize max-size values (separate CSV per size)."
         )
     )
     parser.add_argument(
@@ -370,29 +257,8 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         type=str,
         default=DEFAULT_RESULTS_PREFIX,
         help=(
-            "Prefix for output CSV files. For each max-size value and backend, "
-            "a CSV named <prefix>_<backend>_<size>.csv will be created in the "
-            "directory being evaluated."
-        ),
-    )
-    parser.add_argument(
-        "--backend",
-        type=str,
-        choices=("tf", "tflite", "both"),
-        default="tf",
-        help=(
-            "Which MUSIQ backend to use: 'tf' (TensorFlow Hub), "
-            "'tflite' (TFLite), or 'both' for side-by-side comparison. "
-            "Default: tf."
-        ),
-    )
-    parser.add_argument(
-        "--tflite-model",
-        type=Path,
-        default=None,
-        help=(
-            "Path to MUSIQ TFLite model (.tflite). Required when backend is "
-            "'tflite' or 'both'."
+            "Prefix for output CSV files. For each max-size value, a CSV named "
+            "<prefix>_<size>.csv will be created in the directory being evaluated."
         ),
     )
     return parser.parse_args(argv)
@@ -415,8 +281,6 @@ def main(argv: Optional[List[str]] = None) -> int:
         images,
         max_sizes,
         args.output_prefix,
-        args.backend,
-        args.tflite_model,
     )
     return 0
 
