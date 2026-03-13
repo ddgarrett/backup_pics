@@ -5,11 +5,11 @@ Image Evaluator (MUSIQ only) — evaluate images (e.g. 4080×3071 JPEGs) with MU
 Takes a directory path, walks main and subdirectories for JPEGs, and saves CSV
 results. Supports evaluating at multiple resize max-sizes in a single run; for
 each max-size value, a separate CSV file is written whose name is suffixed
-with the max-size (e.g. image_evaluation_musiq_results_512.csv).
+with the max-size (e.g. 1024.csv).
 
 Usage examples:
 
-  # Default, evaluate with TensorFlow MUSIQ at max-size 512 only
+  # Default, evaluate with TensorFlow MUSIQ at max-size 1024 only
   python image_evaluator_musiq.py /path/to/images
 
   # Evaluate at multiple sizes (e.g. 256, 512, full-res)
@@ -245,11 +245,11 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         "--max-size",
         type=int,
         nargs="+",
-        default=[512],
+        default=[1024],
         metavar="N",
         help=(
             "One or more max-size values in pixels for resizing the longest side. "
-            "Use 0 for full resolution (no resize). Default: 512."
+            "Use 0 for full resolution (no resize). Default: 1024."
         ),
     )
     parser.add_argument(
