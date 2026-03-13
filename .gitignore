@@ -206,3 +206,7 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 .DS_Store
+musiq_saved_model/fingerprint.pb
+musiq_saved_model/saved_model.pb
+musiq_saved_model/variables/variables.data-00000-of-00001
+musiq_saved_model/variables/variables.index
