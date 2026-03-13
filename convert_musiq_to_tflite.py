@@ -9,6 +9,9 @@ Usage:
   python convert_musiq_to_tflite.py /path/to/musiq_ava_saved_model
   python convert_musiq_to_tflite.py /path/to/saved_model --output musiq_ava.tflite
 
+  python convert_musiq_to_tflite.py ./musiq_saved_model --output musiq_ava.tflite
+  python convert_musiq_to_tflite.py musiq_saved_model --output musiq_ava.tflite
+
 To obtain the SavedModel:
   1. Download from TF Hub / Kaggle (google/musiq/ava/1), or
   2. Save it from Python:
