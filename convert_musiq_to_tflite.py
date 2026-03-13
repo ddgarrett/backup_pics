@@ -2,28 +2,28 @@
 """
 Convert the MUSIQ AVA TensorFlow SavedModel to TFLite.
 
+Intended for use on Raspberry Pi 5 (16GB RAM is sufficient for conversion).
 Reduces console noise during conversion and writes the resulting .tflite file.
-Run once on a machine with full TensorFlow, then copy the .tflite file to the Pi.
+Run from the backup_pics project directory.
 
-Usage:
-  python convert_musiq_to_tflite.py /path/to/musiq_ava_saved_model
-  python convert_musiq_to_tflite.py /path/to/saved_model --output musiq_ava.tflite
-
+Usage (on the Pi):
   python convert_musiq_to_tflite.py ./musiq_saved_model --output musiq_ava.tflite
-  python convert_musiq_to_tflite.py musiq_saved_model --output musiq_ava.tflite
 
-To obtain the SavedModel:
-  1. Download from TF Hub / Kaggle (google/musiq/ava/1), or
-  2. Save it from Python:
-       import tensorflow_hub as hub
-       model = hub.load("https://tfhub.dev/google/musiq/ava/1")
-       model.save("/path/to/musiq_ava_saved_model")
+To obtain the SavedModel on the Pi:
+  import tensorflow_hub as hub
+  model = hub.load("https://tfhub.dev/google/musiq/ava/1")
+  model.save("./musiq_saved_model")
 """
 
 from __future__ import annotations
 
-import argparse
+# Must be set before TensorFlow is imported (reduces C++ / oneDNN log spam)
 import os
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+os.environ["TF_LOGGING_VERBOSITY"] = "ERROR"
+
+import argparse
+import contextlib
 import sys
 from pathlib import Path
 
@@ -54,10 +54,7 @@ def main() -> int:
         print(f"Not a directory: {saved_model_dir}", file=sys.stderr)
         return 1
 
-    # Quiet TensorFlow during conversion
-    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
     import tensorflow as tf  # noqa: E402
-
     tf.get_logger().setLevel("ERROR")
     if hasattr(tf, "autograph"):
         tf.autograph.set_verbosity(0)
@@ -69,18 +66,41 @@ def main() -> int:
     if out_path.suffix.lower() != ".tflite":
         out_path = out_path.with_suffix(".tflite")
 
-    print(f"Converting {saved_model_dir} to TFLite ...")
+    print(f"Converting {saved_model_dir} ...")
     converter = tf.lite.TFLiteConverter.from_saved_model(str(saved_model_dir))
     if not args.no_optimize:
         converter.optimizations = [tf.lite.Optimize.DEFAULT]
 
-    tflite_bytes = converter.convert()
+    @contextlib.contextmanager
+    def suppress_stderr():
+        """Redirect stderr to devnull during conversion to silence TF C++/oneDNN output."""
+        try:
+            stderr_fd = sys.stderr.fileno()
+            with open(os.devnull, "w") as devnull:
+                save_fd = os.dup(stderr_fd)
+                try:
+                    os.dup2(devnull.fileno(), stderr_fd)
+                    yield
+                finally:
+                    os.dup2(save_fd, stderr_fd)
+                    os.close(save_fd)
+        except (OSError, AttributeError):
+            # Windows or non-fd stderr: run without suppressing
+            yield
+
+    try:
+        with suppress_stderr():
+            tflite_bytes = converter.convert()
+    except Exception as e:
+        print(f"Conversion failed: {e}", file=sys.stderr)
+        return 1
+
     if not tflite_bytes:
         print("Conversion returned no bytes.", file=sys.stderr)
         return 1
 
     out_path.write_bytes(tflite_bytes)
-    print(f"Wrote {len(tflite_bytes)} bytes to {out_path}")
+    print(f"Wrote {len(tflite_bytes)} bytes to {out_path.absolute()}")
     return 0
 
 
