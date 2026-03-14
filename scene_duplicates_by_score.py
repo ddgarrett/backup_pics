@@ -30,8 +30,14 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
+
+import exifread
+import numpy as np
+from imagededup.methods import CNN
 
 # image_evaluator_musiq.py output: prefix_size.csv (e.g. image_evaluation_musiq_results_1024.csv)
 MUSIQ_CSV_PREFIX = "image_evaluation_musiq_results"
@@ -126,7 +132,6 @@ def get_exif_extras(image_path: Path) -> dict[str, str]:
     if not image_path or not image_path.is_file():
         return out
     try:
-        import exifread
         with open(str(image_path), "rb") as f:
             tags = exifread.process_file(f)
     except Exception:
@@ -146,10 +151,6 @@ def get_gps_from_exif(image_path: Path) -> tuple[float, float] | None:
     """
     Read EXIF GPS using exifread; tag names from process_images/image_collection_metadata.csv (img_lat / img_lon).
     """
-    try:
-        import exifread
-    except ImportError:
-        return None
     if not image_path or not image_path.is_file():
         return None
     try:
@@ -190,7 +191,6 @@ def get_gps_from_exif(image_path: Path) -> tuple[float, float] | None:
 def _debug_print_gps_ifd(image_path: Path) -> None:
     """Print raw GPS tags using exifread for debugging."""
     try:
-        import exifread
         with open(str(image_path), "rb") as f:
             tags = exifread.process_file(f)
         gps_tags = [(k, v) for k, v in tags.items() if k.startswith("GPS ")]
@@ -209,8 +209,6 @@ def _debug_print_gps_ifd(image_path: Path) -> None:
 
 def distance_meters_flat(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Distance between two (lat, lon) points in meters (flat-earth; fine for ~200 m)."""
-    import math
-
     dlat_deg = lat2 - lat1
     dlon_deg = lon2 - lon1
     lat_mid_rad = math.radians((lat1 + lat2) / 2)
@@ -236,7 +234,6 @@ def get_datetime_taken(image_path: Path) -> str:
     """
     if image_path and image_path.is_file():
         try:
-            import exifread
             with open(str(image_path), "rb") as f:
                 tags = exifread.process_file(f)
             for tag_name in _EXIFREAD_DATETIME_TAGS:
@@ -260,7 +257,6 @@ def get_datetime_taken(image_path: Path) -> str:
             pass
     if image_path:
         try:
-            from datetime import datetime, timezone
             mtime = image_path.stat().st_mtime
             return datetime.fromtimestamp(mtime, tz=timezone.utc).isoformat()
         except Exception:
@@ -341,8 +337,6 @@ def build_encoding_map_for_paths(
     relative_paths: list[str],
 ) -> dict[str, "np.ndarray"]:
     """Build CNN encoding map for the given relative paths. Keys = relative_path."""
-    from imagededup.methods import CNN
-
     cnn = CNN()
     encodings: dict[str, "np.ndarray"] = {}
     for rel in relative_paths:
@@ -356,8 +350,6 @@ def build_encoding_map_for_paths(
 
 
 def cosine_similarity(a: "np.ndarray", b: "np.ndarray") -> float:
-    import numpy as np
-
     a = np.asarray(a).flatten().astype(float)
     b = np.asarray(b).flatten().astype(float)
     dot = float(np.dot(a, b))
@@ -386,8 +378,6 @@ def find_duplicates_by_score(
       keeper_to_duplicates: keeper relative_path -> list of duplicate relative_paths
       duplicate_to_keeper: duplicate relative_path -> keeper relative_path
     """
-    from imagededup.methods import CNN
-
     ordered_all = get_scored_paths_in_order(image_root, musiq_csv_size=musiq_csv_size)
     # Exclude poor-quality (score < 4) from duplicate checking
     ordered = [(p, s) for p, s in ordered_all if s >= POOR_QUALITY_THRESHOLD]
@@ -634,18 +624,13 @@ def main() -> int:
             print("Checking for duplicates (highest-scoring images first):")
 
     gps_radius = None if args.gps_radius_meters == 0 else args.gps_radius_meters
-    try:
-        keeper_to_dups, dup_to_keeper = find_duplicates_by_score(
-            image_root,
-            min_similarity_threshold=args.threshold,
-            gps_radius_meters=gps_radius,
-            musiq_csv_size=args.musiq_csv_size,
-            verbose=args.verbose,
-        )
-    except ImportError as e:
-        print("Install imagededup: pip install imagededup", file=sys.stderr)
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
+    keeper_to_dups, dup_to_keeper = find_duplicates_by_score(
+        image_root,
+        min_similarity_threshold=args.threshold,
+        gps_radius_meters=gps_radius,
+        musiq_csv_size=args.musiq_csv_size,
+        verbose=args.verbose,
+    )
 
     if args.list_remove:
         for dup in sorted(dup_to_keeper.keys()):
