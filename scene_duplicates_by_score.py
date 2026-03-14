@@ -188,25 +188,6 @@ def get_gps_from_exif(image_path: Path) -> tuple[float, float] | None:
         return None
 
 
-def _debug_print_gps_ifd(image_path: Path) -> None:
-    """Print raw GPS tags using exifread for debugging."""
-    try:
-        with open(str(image_path), "rb") as f:
-            tags = exifread.process_file(f)
-        gps_tags = [(k, v) for k, v in tags.items() if k.startswith("GPS ")]
-        if not gps_tags:
-            print(f"  [debug-gps] No GPS tags in {image_path}", file=sys.stderr)
-            return
-        print(f"  [debug-gps] GPS tags:", file=sys.stderr)
-        for name, tag in gps_tags:
-            if hasattr(tag, "values"):
-                print(f"    {name}: {tag.values}", file=sys.stderr)
-            else:
-                print(f"    {name}: {tag!r}", file=sys.stderr)
-    except Exception as e:
-        print(f"  [debug-gps] Error: {e}", file=sys.stderr)
-
-
 def distance_meters_flat(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Distance between two (lat, lon) points in meters (flat-earth; fine for ~200 m)."""
     dlat_deg = lat2 - lat1
@@ -593,11 +574,6 @@ def main() -> int:
         action="store_true",
         help="Show progress: directory, picture counts, highest-scoring images as processed, duplicate and non-duplicate counts.",
     )
-    parser.add_argument(
-        "--debug-gps",
-        action="store_true",
-        help="Print raw GPS EXIF for the first image (to debug missing coordinates, e.g. Pixel phone).",
-    )
     args = parser.parse_args()
 
     image_root = args.day_directory.resolve()
@@ -609,11 +585,6 @@ def main() -> int:
     report_path = args.output if args.output is not None else image_root / "scene_duplicates_report.json"
 
     musiq_rows = load_full_musiq_csv(image_root, size=args.musiq_csv_size)
-    if args.debug_gps and musiq_rows:
-        first_rel = musiq_rows[0].get("relative_path", "").strip()
-        if first_rel:
-            print(f"[debug-gps] First image: {first_rel}", file=sys.stderr)
-            _debug_print_gps_ifd(image_root / first_rel)
     if args.verbose:
         print(f"Processing directory: {image_root}")
         print(f"Pictures found in MUSIQ score CSV: {len(musiq_rows)}")
