@@ -386,6 +386,8 @@ def find_duplicates_by_score(
     for keeper_path in paths:
         if keeper_path not in encodings:
             continue
+        if keeper_path in duplicate_to_keeper:
+            continue  # already a duplicate of a higher-scoring image; don't use as keeper
         keeper_idx = path_to_idx[keeper_path]
         keeper_score = ordered[keeper_idx][1]
         keeper_enc = encodings[keeper_path]
