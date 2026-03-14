@@ -1,5 +1,15 @@
 import tensorflow_hub as hub
 
+'''
+result:
+
+<class 'tensorflow.python.saved_model.load.Loader._recreate_base_user_object.<locals>._UserObject'>
+False
+['f', 'graph_debug_info', 'signatures', 'tensorflow_git_version', 'tensorflow_version']
+Signatures: ['serving_default']
+
+'''
+
 model = hub.load("https://tfhub.dev/google/musiq/ava/1")
 
 # What type is it?
