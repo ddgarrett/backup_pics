@@ -1,0 +1,6 @@
+# Scene duplicates by score (scene_duplicates_by_score.py)
+# Install: pip install -r requirements_scene_duplicates.txt
+# Also requires image_evaluator dependencies so scores exist (see requirements_image_evaluator.txt).
+
+imagededup>=0.3.0
+numpy>=1.20.0
