@@ -1,25 +1,14 @@
+import tensorflow as tf
 import tensorflow_hub as hub
-
-'''
-result:
-
-<class 'tensorflow.python.saved_model.load.Loader._recreate_base_user_object.<locals>._UserObject'>
-False
-['f', 'graph_debug_info', 'signatures', 'tensorflow_git_version', 'tensorflow_version']
-Signatures: ['serving_default']
-
-'''
 
 model = hub.load("https://tfhub.dev/google/musiq/ava/1")
 
-# What type is it?
-print(type(model))
+# Create a dummy input tensor based on the model's requirements
+dummy_input = tf.zeros((1, 224, 224, 3)) 
 
-# Does it have .layers (Keras-style)?
-print(hasattr(model, "layers"))
-
-# What attributes does it have?
-print([x for x in dir(model) if not x.startswith("_")])
-
-# Signatures (what you're already using)
-print("Signatures:", list(model.signatures.keys()))
+# Try calling the model object directly with return_endpoints=True
+try:
+    outputs = model(dummy_input, training=False, return_endpoints=True)
+    print(outputs.keys()) # Look for 'transformer_output', 'pooled_output', or 'enc_out'
+except TypeError:
+    print("This model does not support return_endpoints via __call__.")
