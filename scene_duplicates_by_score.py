@@ -14,10 +14,12 @@ When both the high-scoring (keeper) photo and the candidate have EXIF GPS, the
 duplicate test is run only if the candidate is within --gps-radius-meters (default
 200). Photos without GPS are always compared (no distance filter).
 
+By default, saves a CSV in the same directory as the photos (image_scores_and_status.csv)
+with all input MUSIQ CSV fields plus: gps_latitude, gps_longitude, date_time_taken, status, dup_photo.
+
 Usage:
   python scene_duplicates_by_score.py /path/to/day_directory
   python scene_duplicates_by_score.py /path/to/day_directory --gps-radius-meters 200
-  python scene_duplicates_by_score.py /path/to/day_directory --output duplicates_report.json
 
 Reads scores from image_evaluator_musiq CSV only (e.g. image_evaluation_musiq_results_1024.csv).
   Use --musiq-csv-size to match the max-size you used (default 1024; use 0 for 'full').
@@ -38,8 +40,8 @@ MUSIQ_CSV_DEFAULT_SIZE = 1024
 # Score below this: "poor quality", excluded from duplicate checking
 POOR_QUALITY_THRESHOLD = 4.0
 
-# Earth radius in meters for haversine
-_EARTH_RADIUS_METERS = 6_371_000
+# Approximate meters per degree (flat-earth; fine for ~200 m)
+_METERS_PER_DEG_LAT = 111_320
 
 
 def _dms_to_decimal(dms: tuple, ref: str, positive_ref: str) -> float | None:
@@ -96,16 +98,16 @@ def get_gps_from_exif(image_path: Path) -> tuple[float, float] | None:
         return None
 
 
-def haversine_meters(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Distance between two (lat, lon) points in meters."""
+def distance_meters_flat(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Distance between two (lat, lon) points in meters (flat-earth; fine for ~200 m)."""
     import math
 
-    phi1, phi2 = math.radians(lat1), math.radians(lat2)
-    dphi = math.radians(lat2 - lat1)
-    dlam = math.radians(lon2 - lon1)
-    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2) ** 2
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-    return _EARTH_RADIUS_METERS * c
+    dlat_deg = lat2 - lat1
+    dlon_deg = lon2 - lon1
+    lat_mid_rad = math.radians((lat1 + lat2) / 2)
+    dlat_m = dlat_deg * _METERS_PER_DEG_LAT
+    dlon_m = dlon_deg * _METERS_PER_DEG_LAT * math.cos(lat_mid_rad)
+    return math.sqrt(dlat_m * dlat_m + dlon_m * dlon_m)
 
 
 def build_gps_cache(image_root: Path, relative_paths: list[str]) -> dict[str, tuple[float, float] | None]:
@@ -255,6 +257,7 @@ def find_duplicates_by_score(
     min_similarity_threshold: float = 0.65,
     gps_radius_meters: float | None = 200.0,
     musiq_csv_size: int = MUSIQ_CSV_DEFAULT_SIZE,
+    verbose: bool = False,
 ) -> tuple[dict[str, list[str]], dict[str, str]]:
     """
     For each image in score-desc order, mark lower-scoring images as duplicates if same scene.
@@ -295,6 +298,7 @@ def find_duplicates_by_score(
         if keeper_path not in encodings:
             continue
         keeper_idx = path_to_idx[keeper_path]
+        keeper_score = ordered[keeper_idx][1]
         keeper_enc = encodings[keeper_path]
         keeper_gps = gps_cache.get(keeper_path) if use_gps else None
 
@@ -310,7 +314,7 @@ def find_duplicates_by_score(
             if use_gps and keeper_gps is not None:
                 other_gps = gps_cache.get(other_path)
                 if other_gps is not None:
-                    dist = haversine_meters(keeper_gps[0], keeper_gps[1], other_gps[0], other_gps[1])
+                    dist = distance_meters_flat(keeper_gps[0], keeper_gps[1], other_gps[0], other_gps[1])
                     if dist > gps_radius_meters:
                         continue  # too far; don't run duplicate test
 
@@ -318,6 +322,16 @@ def find_duplicates_by_score(
             if sim >= min_similarity_threshold:
                 duplicate_to_keeper[other_path] = keeper_path
                 keeper_to_duplicates.setdefault(keeper_path, []).append(other_path)
+
+        if verbose:
+            n_dups = len(keeper_to_duplicates.get(keeper_path, []))
+            print(f"  Processing highest-scoring image (score {keeper_score:.4f}): {keeper_path} - {n_dups} duplicate(s) found")
+
+    if verbose:
+        n_dups = len(duplicate_to_keeper)
+        n_remain = len(ordered) - n_dups
+        print(f"  Duplicates found: {n_dups}")
+        print(f"  Non-duplicate images remaining: {n_remain}")
 
     return keeper_to_duplicates, duplicate_to_keeper
 
@@ -419,7 +433,7 @@ def main() -> int:
         "-o",
         type=Path,
         default=None,
-        help="Write JSON report here: keeper -> list of duplicate paths and duplicate -> keeper",
+        help="Path for JSON duplicate report. Default: same directory as photos (scene_duplicates_report.json).",
     )
     parser.add_argument(
         "--list-remove",
@@ -440,12 +454,31 @@ def main() -> int:
         metavar="N",
         help=f"Max-size label for image_evaluator_musiq CSV: look for image_evaluation_musiq_results_N.csv (default {MUSIQ_CSV_DEFAULT_SIZE}). Use 0 for 'full'.",
     )
+    parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Show progress: directory, picture counts, highest-scoring images as processed, duplicate and non-duplicate counts.",
+    )
     args = parser.parse_args()
 
     image_root = args.day_directory.resolve()
     if not image_root.is_dir():
         print(f"Not a directory: {image_root}", file=sys.stderr)
         return 1
+
+    # Default: save outputs in the same directory as the photos
+    report_path = args.output if args.output is not None else image_root / "scene_duplicates_report.json"
+
+    if args.verbose:
+        print(f"Processing directory: {image_root}")
+        musiq_rows = load_full_musiq_csv(image_root, size=args.musiq_csv_size)
+        print(f"Pictures found in MUSIQ score CSV: {len(musiq_rows)}")
+        scores = load_scores(image_root, musiq_csv_size=args.musiq_csv_size)
+        n_rejected = sum(1 for _, s in scores.items() if s is not None and s < POOR_QUALITY_THRESHOLD)
+        print(f"Pictures rejected (poor quality, score < {POOR_QUALITY_THRESHOLD}): {n_rejected}")
+        if scores:
+            print("Checking for duplicates (highest-scoring images first):")
 
     gps_radius = None if args.gps_radius_meters == 0 else args.gps_radius_meters
     try:
@@ -454,6 +487,7 @@ def main() -> int:
             min_similarity_threshold=args.threshold,
             gps_radius_meters=gps_radius,
             musiq_csv_size=args.musiq_csv_size,
+            verbose=args.verbose,
         )
     except ImportError as e:
         print("Install imagededup: pip install imagededup", file=sys.stderr)
@@ -487,24 +521,24 @@ def main() -> int:
     else:
         print("No scene duplicates found at this threshold.")
 
-    if args.output:
-        report = {
-            "day_directory": str(image_root),
-            "musiq_csv_size": args.musiq_csv_size,
-            "threshold": args.threshold,
-            "gps_radius_meters": args.gps_radius_meters if args.gps_radius_meters != 0 else None,
-            "keeper_to_duplicates": keeper_to_dups,
-            "duplicate_to_keeper": dup_to_keeper,
-        }
-        with open(args.output, "w", encoding="utf-8") as f:
-            json.dump(report, f, indent=2, ensure_ascii=False)
-        print(f"Wrote report to {args.output}")
+    report = {
+        "day_directory": str(image_root),
+        "musiq_csv_size": args.musiq_csv_size,
+        "threshold": args.threshold,
+        "gps_radius_meters": args.gps_radius_meters if args.gps_radius_meters != 0 else None,
+        "keeper_to_duplicates": keeper_to_dups,
+        "duplicate_to_keeper": dup_to_keeper,
+    }
+    with open(report_path, "w", encoding="utf-8") as f:
+        json.dump(report, f, indent=2, ensure_ascii=False)
+    print(f"Wrote report to {report_path}")
 
-    # Write status CSV (same folder as images): MUSIQ CSV fields + gps_latitude, gps_longitude, date_time_taken, status, dup_photo
-    musiq_rows = load_full_musiq_csv(image_root, size=args.musiq_csv_size)
+    # Default output: CSV with all fields in the same directory as the photos
+    if not args.verbose:
+        musiq_rows = load_full_musiq_csv(image_root, size=args.musiq_csv_size)
     if musiq_rows:
         status_csv_path = write_status_csv(image_root, musiq_rows, dup_to_keeper)
-        print(f"Wrote {status_csv_path.name} to {image_root}")
+        print(f"Wrote {status_csv_path.name} (all fields) to {image_root}")
 
     return 0
 
