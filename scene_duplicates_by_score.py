@@ -44,58 +44,163 @@ POOR_QUALITY_THRESHOLD = 4.0
 _METERS_PER_DEG_LAT = 111_320
 
 
-def _dms_to_decimal(dms: tuple, ref: str, positive_ref: str) -> float | None:
-    """Convert EXIF (deg, min, sec) rationals to decimal degrees. ref is e.g. 'N' or 'E'."""
-    if not dms or len(dms) != 3:
-        return None
+# exifread tag names: "IFD TagName" (same as process_images/image_collection_metadata.csv).
+# GPS: standard EXIF only defines GPSLatitude/GPSLongitude + Ref; we try these.
+# DateTime: try in order; add EXIF DateTimeDigitized and GPS GPSDateStamp as fallbacks.
+_EXIFREAD_LAT_TAGS = ["GPS GPSLatitude", "GPS GPSLatitudeRef"]
+_EXIFREAD_LON_TAGS = ["GPS GPSLongitude", "GPS GPSLongitudeRef"]
+_EXIFREAD_DATETIME_TAGS = [
+    "EXIF DateTimeOriginal",
+    "EXIF DateTimeDigitized",
+    "Image DateTime",
+    "GPS GPSDate",
+    "GPS GPSDateStamp",
+]
+# Camera, dimensions, orientation, exposure (from process_images/image_collection_metadata.csv + EXIF standard)
+_EXIFREAD_MAKE_TAGS = ["Image Make"]
+_EXIFREAD_MODEL_TAGS = ["Image Model"]
+_EXIFREAD_IMAGE_WIDTH_TAGS = ["Image ImageWidth", "EXIF ExifImageWidth"]
+_EXIFREAD_IMAGE_LENGTH_TAGS = ["Image ImageLength", "EXIF ExifImageLength"]
+_EXIFREAD_ORIENTATION_TAGS = ["Image Orientation"]
+_EXIFREAD_EXPOSURE_TIME_TAGS = ["EXIF ExposureTime"]
+_EXIFREAD_FNUMBER_TAGS = ["EXIF FNumber"]
+_EXIFREAD_ISO_SPEED_TAGS = ["EXIF ISOSpeedRatings"]
+
+
+def _exifread_component_to_float(v) -> float:
+    """Convert one DMS component from exifread (Rational or number) to float."""
+    if v is None:
+        return 0.0
+    if hasattr(v, "num") and hasattr(v, "den"):
+        return float(v.num) / float(v.den) if v.den else 0.0
     try:
-        d = float(dms[0][0]) / float(dms[0][1]) if dms[0][1] else 0.0
-        m = float(dms[1][0]) / float(dms[1][1]) if dms[1][1] else 0.0
-        s = float(dms[2][0]) / float(dms[2][1]) if dms[2][1] else 0.0
-        decimal = d + (m / 60.0) + (s / 3600.0)
-        return decimal if ref == positive_ref else -decimal
-    except (TypeError, ZeroDivisionError):
-        return None
+        return float(v)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _exifread_first_value(tags: dict, tag_names: list[str]) -> str:
+    """Return first found tag value as string; empty string if none. Handles .values and rationals."""
+    for name in tag_names:
+        if name not in tags:
+            continue
+        tag = tags[name]
+        if not hasattr(tag, "values"):
+            return str(tag)
+        val = tag.values
+        if isinstance(val, (list, tuple)):
+            if len(val) == 1:
+                val = val[0]
+            elif len(val) == 2:
+                n = _exifread_component_to_float(val[0])
+                d = _exifread_component_to_float(val[1])
+                if not d:
+                    return str(int(n)) if n == int(n) else str(n)
+                if n == int(n) and d == int(d) and int(d) > 1:
+                    return f"{int(n)}/{int(d)}"
+                return f"{n / d:.4g}"
+        if val is None:
+            return ""
+        if hasattr(val, "num") and hasattr(val, "den"):
+            return str(_exifread_component_to_float(val))
+        return str(val)
+    return ""
+
+
+def get_exif_extras(image_path: Path) -> dict[str, str]:
+    """
+    Read camera, dimensions, orientation, exposure from EXIF via exifread.
+    Returns dict with keys: img_make, img_model, exif_image_width, exif_image_length,
+    img_orientation, exif_exposure_time, exif_f_number, exif_iso_speed_ratings.
+    """
+    out: dict[str, str] = {
+        "img_make": "",
+        "img_model": "",
+        "exif_image_width": "",
+        "exif_image_length": "",
+        "img_orientation": "",
+        "exif_exposure_time": "",
+        "exif_f_number": "",
+        "exif_iso_speed_ratings": "",
+    }
+    try:
+        import exifread
+        with open(image_path, "rb") as f:
+            tags = exifread.process_file(f, details=False)
+    except Exception:
+        return out
+    out["img_make"] = _exifread_first_value(tags, _EXIFREAD_MAKE_TAGS)
+    out["img_model"] = _exifread_first_value(tags, _EXIFREAD_MODEL_TAGS)
+    out["exif_image_width"] = _exifread_first_value(tags, _EXIFREAD_IMAGE_WIDTH_TAGS)
+    out["exif_image_length"] = _exifread_first_value(tags, _EXIFREAD_IMAGE_LENGTH_TAGS)
+    out["img_orientation"] = _exifread_first_value(tags, _EXIFREAD_ORIENTATION_TAGS)
+    out["exif_exposure_time"] = _exifread_first_value(tags, _EXIFREAD_EXPOSURE_TIME_TAGS)
+    out["exif_f_number"] = _exifread_first_value(tags, _EXIFREAD_FNUMBER_TAGS)
+    out["exif_iso_speed_ratings"] = _exifread_first_value(tags, _EXIFREAD_ISO_SPEED_TAGS)
+    return out
 
 
 def get_gps_from_exif(image_path: Path) -> tuple[float, float] | None:
     """
-    Read EXIF GPS from an image file. Returns (latitude, longitude) in decimal degrees or None.
+    Read EXIF GPS using exifread; tag names from process_images/image_collection_metadata.csv (img_lat / img_lon).
     """
     try:
-        from PIL import Image
-        from PIL.ExifTags import TAGS
-
-        with Image.open(image_path) as img:
-            exif = img.getexif()
-            if not exif:
-                return None
-            # GPS IFD tag id
-            gps_tag_id = next((tid for tid, name in TAGS.items() if name == "GPSInfo"), None)
-            if gps_tag_id is None:
-                return None
-            gps = exif.get_ifd(gps_tag_id)
-            if not gps:
-                return None
-            lat_dms = gps.get(2)  # GPSLatitude
-            lat_ref = gps.get(1, "N")  # GPSLatitudeRef
-            lon_dms = gps.get(4)  # GPSLongitude
-            lon_ref = gps.get(3, "E")  # GPSLongitudeRef
-            if not lat_dms or not lon_dms:
-                return None
-            lat_ref_s = lat_ref.decode("ascii", errors="ignore") if isinstance(lat_ref, bytes) else (lat_ref or "N")
-            lon_ref_s = lon_ref.decode("ascii", errors="ignore") if isinstance(lon_ref, bytes) else (lon_ref or "E")
-            if not isinstance(lat_ref_s, str):
-                lat_ref_s = "N"
-            if not isinstance(lon_ref_s, str):
-                lon_ref_s = "E"
-            lat = _dms_to_decimal(lat_dms, lat_ref_s, "N")
-            lon = _dms_to_decimal(lon_dms, lon_ref_s, "E")
-            if lat is None or lon is None:
-                return None
-            return (lat, lon)
+        import exifread
+    except ImportError:
+        return None
+    try:
+        with open(image_path, "rb") as f:
+            tags = exifread.process_file(f, details=False)
     except Exception:
         return None
+    lat_tag = next((t for t in _EXIFREAD_LAT_TAGS if t in tags and "Ref" not in t), None)
+    lat_ref_tag = next((t for t in _EXIFREAD_LAT_TAGS if t in tags and "Ref" in t), None)
+    lon_tag = next((t for t in _EXIFREAD_LON_TAGS if t in tags and "Ref" not in t), None)
+    lon_ref_tag = next((t for t in _EXIFREAD_LON_TAGS if t in tags and "Ref" in t), None)
+    if not lat_tag or not lon_tag:
+        return None
+    try:
+        lat_vals = tags[lat_tag].values
+        lon_vals = tags[lon_tag].values
+        if len(lat_vals) != 3 or len(lon_vals) != 3:
+            return None
+        lat_dec = _exifread_component_to_float(lat_vals[0]) + _exifread_component_to_float(lat_vals[1]) / 60.0 + _exifread_component_to_float(lat_vals[2]) / 3600.0
+        lon_dec = _exifread_component_to_float(lon_vals[0]) + _exifread_component_to_float(lon_vals[1]) / 60.0 + _exifread_component_to_float(lon_vals[2]) / 3600.0
+        lat_ref = tags.get(lat_ref_tag)
+        lon_ref = tags.get(lon_ref_tag)
+        if lat_ref is not None and hasattr(lat_ref, "values"):
+            ref_val = lat_ref.values
+            ref_s = ref_val[0] if ref_val else "N"
+            if ref_s in ("S", "s"):
+                lat_dec = -lat_dec
+        if lon_ref is not None and hasattr(lon_ref, "values"):
+            ref_val = lon_ref.values
+            ref_s = ref_val[0] if ref_val else "E"
+            if ref_s in ("W", "w"):
+                lon_dec = -lon_dec
+        return (lat_dec, lon_dec)
+    except (KeyError, TypeError, IndexError, ZeroDivisionError):
+        return None
+
+
+def _debug_print_gps_ifd(image_path: Path) -> None:
+    """Print raw GPS tags using exifread for debugging."""
+    try:
+        import exifread
+        with open(image_path, "rb") as f:
+            tags = exifread.process_file(f, details=False)
+        gps_tags = [(k, v) for k, v in tags.items() if k.startswith("GPS ")]
+        if not gps_tags:
+            print(f"  [debug-gps] No GPS tags in {image_path}", file=sys.stderr)
+            return
+        print(f"  [debug-gps] GPS tags:", file=sys.stderr)
+        for name, tag in gps_tags:
+            if hasattr(tag, "values"):
+                print(f"    {name}: {tag.values}", file=sys.stderr)
+            else:
+                print(f"    {name}: {tag!r}", file=sys.stderr)
+    except Exception as e:
+        print(f"  [debug-gps] Error: {e}", file=sys.stderr)
 
 
 def distance_meters_flat(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -121,29 +226,33 @@ def build_gps_cache(image_root: Path, relative_paths: list[str]) -> dict[str, tu
 
 def get_datetime_taken(image_path: Path) -> str:
     """
-    Return date/time the photo was taken: EXIF DateTimeOriginal or DateTime, else file mtime (ISO).
+    Return date/time the photo was taken using exifread; tag names from
+    process_images/image_collection_metadata.csv img_date_time exif_tags
+    (EXIF DateTimeOriginal, Image DateTime, GPS GPSDate). Fallback: file mtime (ISO).
     """
     try:
-        from PIL import Image
-        from PIL.ExifTags import TAGS
-
-        with Image.open(image_path) as img:
-            exif = img.getexif()
-            if exif:
-                # DateTimeOriginal = 36867, DateTime = 306
-                for tag_id in (36867, 306):
-                    val = exif.get(tag_id)
-                    if val and isinstance(val, str):
-                        # EXIF format "YYYY:MM:DD HH:MM:SS" -> convert to ISO
-                        val = val.strip()
-                        if len(val) >= 19 and ":" in val:
-                            date_part = val[:10].replace(":", "-")
-                            time_part = val[11:19]
-                            return f"{date_part}T{time_part}"
-                        return val
+        import exifread
+        with open(image_path, "rb") as f:
+            tags = exifread.process_file(f, details=False)
+        for tag_name in _EXIFREAD_DATETIME_TAGS:
+            if tag_name not in tags:
+                continue
+            tag = tags[tag_name]
+            if not hasattr(tag, "values"):
+                continue
+            val = tag.values
+            if isinstance(val, (list, tuple)) and len(val) == 1:
+                val = val[0]
+            if not val:
+                continue
+            s = str(val).strip()
+            if len(s) >= 19 and ":" in s:
+                date_part = s[:10].replace(":", "-")
+                time_part = s[11:19]
+                return f"{date_part}T{time_part}"
+            return s
     except Exception:
         pass
-    # Fallback: file modification time
     try:
         from datetime import datetime, timezone
         mtime = image_path.stat().st_mtime
@@ -368,6 +477,18 @@ def _status_for_row(
     return "TBD", ""
 
 
+_EXIF_EXTRAS_KEYS = [
+    "img_make",
+    "img_model",
+    "exif_image_width",
+    "exif_image_length",
+    "img_orientation",
+    "exif_exposure_time",
+    "exif_f_number",
+    "exif_iso_speed_ratings",
+]
+
+
 def write_status_csv(
     image_root: Path,
     rows: list[dict[str, str]],
@@ -375,16 +496,23 @@ def write_status_csv(
 ) -> Path:
     """
     Write CSV with same fields as input MUSIQ CSV plus: gps_latitude, gps_longitude,
-    date_time_taken, status, dup_photo. Uses POOR_QUALITY_THRESHOLD and score bands for status.
+    date_time_taken, EXIF extras (make, model, dimensions, orientation, exposure), status, dup_photo.
     """
     if not rows:
         return image_root / STATUS_CSV_BASENAME
     paths = [r.get("relative_path", "").strip() for r in rows if r.get("relative_path", "").strip()]
     gps_cache = build_gps_cache(image_root, paths)
+    extras_cache: dict[str, dict[str, str]] = {}
+    for rel in paths:
+        full = image_root / rel if rel else None
+        extras_cache[rel] = get_exif_extras(full) if full and full.is_file() else {k: "" for k in _EXIF_EXTRAS_KEYS}
     out_path = image_root / STATUS_CSV_BASENAME
-    # Input columns (preserve order from first row)
     input_keys = list(rows[0].keys())
-    extra_keys = ["gps_latitude", "gps_longitude", "date_time_taken", "status", "dup_photo"]
+    extra_keys = [
+        "gps_latitude", "gps_longitude", "date_time_taken",
+        * _EXIF_EXTRAS_KEYS,
+        "status", "dup_photo",
+    ]
     fieldnames = input_keys + extra_keys
 
     with open(out_path, "w", newline="", encoding="utf-8") as f:
@@ -399,10 +527,13 @@ def write_status_csv(
             gps_lon = f"{gps[1]:.6f}" if gps else ""
             full = image_root / rel if rel else None
             date_time_taken = get_datetime_taken(full) if full and full.is_file() else ""
+            extras = extras_cache.get(rel) or {k: "" for k in _EXIF_EXTRAS_KEYS}
             out_row = dict(row)
             out_row["gps_latitude"] = gps_lat
             out_row["gps_longitude"] = gps_lon
             out_row["date_time_taken"] = date_time_taken
+            for k in _EXIF_EXTRAS_KEYS:
+                out_row[k] = extras.get(k, "")
             out_row["status"] = status
             out_row["dup_photo"] = dup_photo
             writer.writerow(out_row)
@@ -460,6 +591,11 @@ def main() -> int:
         action="store_true",
         help="Show progress: directory, picture counts, highest-scoring images as processed, duplicate and non-duplicate counts.",
     )
+    parser.add_argument(
+        "--debug-gps",
+        action="store_true",
+        help="Print raw GPS EXIF for the first image (to debug missing coordinates, e.g. Pixel phone).",
+    )
     args = parser.parse_args()
 
     image_root = args.day_directory.resolve()
@@ -470,9 +606,14 @@ def main() -> int:
     # Default: save outputs in the same directory as the photos
     report_path = args.output if args.output is not None else image_root / "scene_duplicates_report.json"
 
+    musiq_rows = load_full_musiq_csv(image_root, size=args.musiq_csv_size)
+    if args.debug_gps and musiq_rows:
+        first_rel = musiq_rows[0].get("relative_path", "").strip()
+        if first_rel:
+            print(f"[debug-gps] First image: {first_rel}", file=sys.stderr)
+            _debug_print_gps_ifd(image_root / first_rel)
     if args.verbose:
         print(f"Processing directory: {image_root}")
-        musiq_rows = load_full_musiq_csv(image_root, size=args.musiq_csv_size)
         print(f"Pictures found in MUSIQ score CSV: {len(musiq_rows)}")
         scores = load_scores(image_root, musiq_csv_size=args.musiq_csv_size)
         n_rejected = sum(1 for _, s in scores.items() if s is not None and s < POOR_QUALITY_THRESHOLD)
@@ -534,8 +675,6 @@ def main() -> int:
     print(f"Wrote report to {report_path}")
 
     # Default output: CSV with all fields in the same directory as the photos
-    if not args.verbose:
-        musiq_rows = load_full_musiq_csv(image_root, size=args.musiq_csv_size)
     if musiq_rows:
         status_csv_path = write_status_csv(image_root, musiq_rows, dup_to_keeper)
         print(f"Wrote {status_csv_path.name} (all fields) to {image_root}")

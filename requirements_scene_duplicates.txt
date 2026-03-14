@@ -4,3 +4,5 @@
 
 imagededup>=0.3.0
 numpy>=1.20.0
+# exifread: EXIF (GPS, datetime) using tag names from process_images/image_collection_metadata.csv
+exifread>=3.0.0
