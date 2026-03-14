@@ -31,6 +31,7 @@ import argparse
 import csv
 import json
 import math
+import shutil
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -346,6 +347,7 @@ def find_duplicates_by_score(
     min_similarity_threshold: float = 0.65,
     gps_radius_meters: float | None = 200.0,
     musiq_csv_size: int = MUSIQ_CSV_DEFAULT_SIZE,
+    poor_quality_threshold: float = POOR_QUALITY_THRESHOLD,
     verbose: bool = False,
 ) -> tuple[dict[str, list[str]], dict[str, str]]:
     """
@@ -360,8 +362,8 @@ def find_duplicates_by_score(
       duplicate_to_keeper: duplicate relative_path -> keeper relative_path
     """
     ordered_all = get_scored_paths_in_order(image_root, musiq_csv_size=musiq_csv_size)
-    # Exclude poor-quality (score < 4) from duplicate checking
-    ordered = [(p, s) for p, s in ordered_all if s >= POOR_QUALITY_THRESHOLD]
+    # Exclude poor-quality (score below threshold) from duplicate checking
+    ordered = [(p, s) for p, s in ordered_all if s >= poor_quality_threshold]
     if not ordered:
         return {}, {}
 
@@ -441,9 +443,10 @@ def _status_for_row(
     relative_path: str,
     score: float | None,
     duplicate_to_keeper: dict[str, str],
+    poor_quality_threshold: float = POOR_QUALITY_THRESHOLD,
 ) -> tuple[str, str]:
     """Return (status, dup_photo). dup_photo only set when status is 'dup'."""
-    if score is not None and score < POOR_QUALITY_THRESHOLD:
+    if score is not None and score < poor_quality_threshold:
         return "poor quality", ""
     if relative_path in duplicate_to_keeper:
         return "dup", duplicate_to_keeper[relative_path]
@@ -471,6 +474,7 @@ def write_status_csv(
     image_root: Path,
     rows: list[dict[str, str]],
     duplicate_to_keeper: dict[str, str],
+    poor_quality_threshold: float = POOR_QUALITY_THRESHOLD,
 ) -> Path:
     """
     Write CSV with same fields as input MUSIQ CSV plus: gps_latitude, gps_longitude,
@@ -504,7 +508,7 @@ def write_status_csv(
             rel = row.get("relative_path", "").strip()
             rel_key = _norm_rel(rel)
             score = _parse_score(row.get("musiq_score"))
-            status, dup_photo = _status_for_row(rel, score, duplicate_to_keeper)
+            status, dup_photo = _status_for_row(rel, score, duplicate_to_keeper, poor_quality_threshold)
             gps = gps_cache.get(rel) if rel else None
             gps_lat = f"{gps[0]:.6f}" if gps else ""
             gps_lon = f"{gps[1]:.6f}" if gps else ""
@@ -521,6 +525,56 @@ def write_status_csv(
             out_row["dup_photo"] = dup_photo
             writer.writerow(out_row)
     return out_path
+
+
+BY_STATUS_DIR = "_by_status"
+
+# Folder names under _by_status for each status (status value -> folder name)
+_STATUS_FOLDER_NAMES = {
+    "best": "best",
+    "good": "good",
+    "TBD": "tbd",
+    "poor quality": "poor quality",
+    "dup": None,  # use dup_<keeper_basename>
+}
+
+
+def copy_images_by_status(
+    image_root: Path,
+    rows: list[dict[str, str]],
+    duplicate_to_keeper: dict[str, str],
+    poor_quality_threshold: float = POOR_QUALITY_THRESHOLD,
+) -> None:
+    """
+    Copy each image into image_root/_by_status/<status_folder>/ using its original filename.
+    Status folders: best, good, tbd, poor quality; for dup use dup_<keeper_basename>.
+    Removes any existing _by_status directory before copying.
+    """
+    base = image_root / BY_STATUS_DIR
+    if base.exists():
+        shutil.rmtree(base)
+    base.mkdir(parents=True, exist_ok=True)
+
+    for row in rows:
+        rel = row.get("relative_path", "").strip()
+        if not rel:
+            continue
+        src = image_root / rel
+        if not src.is_file():
+            continue
+        score = _parse_score(row.get("musiq_score"))
+        status, dup_photo = _status_for_row(rel, score, duplicate_to_keeper, poor_quality_threshold)
+        folder_name = _STATUS_FOLDER_NAMES.get(status)
+        if folder_name is None and status == "dup" and dup_photo:
+            keeper_basename = Path(dup_photo).name
+            folder_name = f"dup_{keeper_basename}"
+        elif folder_name is None:
+            folder_name = status
+        dest_dir = base / folder_name
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest_name = Path(rel).name
+        dest = dest_dir / dest_name
+        shutil.copy2(src, dest)
 
 
 def main() -> int:
@@ -569,6 +623,26 @@ def main() -> int:
         help=f"Max-size label for image_evaluator_musiq CSV: look for image_evaluation_musiq_results_N.csv (default {MUSIQ_CSV_DEFAULT_SIZE}). Use 0 for 'full'.",
     )
     parser.add_argument(
+        "--poor-quality-threshold",
+        type=float,
+        default=POOR_QUALITY_THRESHOLD,
+        metavar="S",
+        help=f"Score below this is 'poor quality' and excluded from duplicate check (default {POOR_QUALITY_THRESHOLD}).",
+    )
+    parser.add_argument(
+        "--copy-by-status",
+        action="store_true",
+        dest="copy_by_status",
+        default=True,
+        help="Copy images into image_root/_by_status/<status>/ subfolders (default).",
+    )
+    parser.add_argument(
+        "--no-copy-by-status",
+        action="store_false",
+        dest="copy_by_status",
+        help="Do not copy images by status.",
+    )
+    parser.add_argument(
         "--verbose",
         "-v",
         action="store_true",
@@ -589,8 +663,8 @@ def main() -> int:
         print(f"Processing directory: {image_root}")
         print(f"Pictures found in MUSIQ score CSV: {len(musiq_rows)}")
         scores = load_scores(image_root, musiq_csv_size=args.musiq_csv_size)
-        n_rejected = sum(1 for _, s in scores.items() if s is not None and s < POOR_QUALITY_THRESHOLD)
-        print(f"Pictures rejected (poor quality, score < {POOR_QUALITY_THRESHOLD}): {n_rejected}")
+        n_rejected = sum(1 for _, s in scores.items() if s is not None and s < args.poor_quality_threshold)
+        print(f"Pictures rejected (poor quality, score < {args.poor_quality_threshold}): {n_rejected}")
         if scores:
             print("Checking for duplicates (highest-scoring images first):")
 
@@ -600,6 +674,7 @@ def main() -> int:
         min_similarity_threshold=args.threshold,
         gps_radius_meters=gps_radius,
         musiq_csv_size=args.musiq_csv_size,
+        poor_quality_threshold=args.poor_quality_threshold,
         verbose=args.verbose,
     )
 
@@ -644,8 +719,15 @@ def main() -> int:
 
     # Default output: CSV with all fields in the same directory as the photos
     if musiq_rows:
-        status_csv_path = write_status_csv(image_root, musiq_rows, dup_to_keeper)
+        status_csv_path = write_status_csv(
+            image_root, musiq_rows, dup_to_keeper, poor_quality_threshold=args.poor_quality_threshold
+        )
         print(f"Wrote {status_csv_path.name} (all fields) to {image_root}")
+        if args.copy_by_status:
+            copy_images_by_status(
+                image_root, musiq_rows, dup_to_keeper, poor_quality_threshold=args.poor_quality_threshold
+            )
+            print(f"Copied images to {image_root / BY_STATUS_DIR}")
 
     return 0
 
