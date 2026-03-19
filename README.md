@@ -131,7 +131,7 @@ Typical use across devices:
      for faster experimentation; outputs stay compatible.
 3. **In `process_images`**:
    - Open the same day folders as a collection.
-   - `process_images` reads the MUSIQ scores (`musiq_rating`) and any pre-labeled statuses
+   - `process_images` reads the MUSIQ scores (`musiq_score`) and any pre-labeled statuses
      produced by `image_scores_and_status.csv`.
    - Use the GUI to refine statuses, review duplicates, and select the best photos.
 
