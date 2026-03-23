@@ -1,0 +1,5 @@
+git+https://github.com/ddgarrett/image_analysis_lib.git@main#egg=image_analysis_lib
+
+# GUI for local menu (only needed if you use menu.py)
+sv-ttk
+
