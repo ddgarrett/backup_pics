@@ -15,7 +15,8 @@ duplicate test is run only if the candidate is within --gps-radius-meters (defau
 200). Photos without GPS are always compared (no distance filter).
 
 By default, saves a CSV in the same directory as the photos (image_scores_and_status.csv)
-with all input MUSIQ CSV fields plus: gps_latitude, gps_longitude, date_time_taken, status, dup_photo.
+with all input MUSIQ CSV fields plus: gps_latitude, gps_longitude, date_time_taken, status,
+dup_photo, cosine_sim (-1 when not a duplicate), and writes dedup_parms.json for tuning recalc.
 
 Usage:
   python scene_duplicates_by_score.py /path/to/day_directory
@@ -34,6 +35,9 @@ from pathlib import Path
 
 from image_analysis_lib import duplicates
 from image_analysis_lib.config import default_config
+
+MUSIQ_CSV_DEFAULT_SIZE = default_config.musiq_csv_default_size
+POOR_QUALITY_THRESHOLD = default_config.poor_quality_threshold
 
 
 def main() -> int:
@@ -89,6 +93,20 @@ def main() -> int:
         help=f"Score below this is 'poor quality' and excluded from duplicate check (default {POOR_QUALITY_THRESHOLD}).",
     )
     parser.add_argument(
+        "--best-score-threshold",
+        type=float,
+        default=default_config.best_score_threshold,
+        metavar="B",
+        help="MUSIQ score above this maps to CSV status 'best' (default from config).",
+    )
+    parser.add_argument(
+        "--tbd-best-score-threshold",
+        type=float,
+        default=default_config.tbd_best_score_threshold,
+        metavar="G",
+        help="MUSIQ score above this maps to CSV status 'good' (default from config).",
+    )
+    parser.add_argument(
         "--copy-by-status",
         action="store_true",
         dest="copy_by_status",
@@ -141,7 +159,7 @@ def main() -> int:
             print("Checking for duplicates (highest-scoring images first):")
 
     gps_radius = None if args.gps_radius_meters == 0 else args.gps_radius_meters
-    keeper_to_dups, dup_to_keeper = duplicates.find_duplicates_by_score(
+    keeper_to_dups, dup_to_keeper, dup_to_cosine = duplicates.find_duplicates_by_score(
         image_root,
         config=default_config,
         min_similarity_threshold=args.threshold,
@@ -192,11 +210,28 @@ def main() -> int:
 
     # Default output: CSV with all fields in the same directory as the photos
     if musiq_rows:
+        parms_out = {
+            "poor_quality_threshold": args.poor_quality_threshold,
+            "min_similarity_threshold": args.threshold,
+            "gps_radius_meters": float(args.gps_radius_meters),
+            "best_score_threshold": args.best_score_threshold,
+            "tbd_best_score_threshold": args.tbd_best_score_threshold,
+            "musiq_csv_size": args.musiq_csv_size,
+            "musiq_csv_prefix": default_config.musiq_csv_prefix,
+        }
+        parms_path = image_root / "dedup_parms.json"
+        with open(parms_path, "w", encoding="utf-8") as pf:
+            json.dump(parms_out, pf, indent=2)
+        print(f"Wrote {parms_path.name} to {image_root}")
+
         status_csv_path = duplicates.write_status_csv(
             image_root,
             musiq_rows,
             dup_to_keeper,
+            dup_to_cosine,
             poor_quality_threshold=args.poor_quality_threshold,
+            best_score_threshold=args.best_score_threshold,
+            tbd_best_score_threshold=args.tbd_best_score_threshold,
         )
         print(f"Wrote {status_csv_path.name} (all fields) to {image_root}")
         if args.copy_by_status:
@@ -205,6 +240,8 @@ def main() -> int:
                 musiq_rows,
                 dup_to_keeper,
                 poor_quality_threshold=args.poor_quality_threshold,
+                best_score_threshold=args.best_score_threshold,
+                tbd_best_score_threshold=args.tbd_best_score_threshold,
             )
             print(f"Copied images to {image_root / duplicates.BY_STATUS_DIR}")
 
